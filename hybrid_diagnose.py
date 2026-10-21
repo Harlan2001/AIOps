@@ -30,6 +30,7 @@ from engine.rule_engine import Engine             # noqa: E402
 from ml.router import Router                       # noqa: E402
 from ml.retriever import SimilarCaseIndex         # noqa: E402
 from llm.client import LLMClient                  # noqa: E402
+from kb.client import KnowledgeClient             # noqa: E402
 
 W = 96
 
@@ -70,6 +71,7 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None):
     retriever = SimilarCaseIndex.from_dataset()
     eng = Engine()
     llm = llm or LLMClient()
+    kbcli = KnowledgeClient()
 
     try:
         rt = router.route(text, errcode)
@@ -77,7 +79,8 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None):
 
         result = {"text": text, "errcode": errcode, "ldate": ldate,
                   "loc": _loc_str(P.parse_lsection(lsection)), "rt": rt,
-                  "cases": [], "rule_res": None, "answer": None, "source": ""}
+                  "cases": [], "rule_res": None, "kb_card": None,
+                  "answer": None, "source": ""}
 
         # ① ML 快速路径：噪音 / ORA，不查库、不调 LLM
         if route == "noise":
@@ -95,6 +98,11 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None):
         # ② ML 召回相似案例（biz / other）
         cases = retriever.query(text, top_k=5)
         result["cases"] = cases
+
+        # ②.5 领域知识层：按中文症状骨架检索 Dimple 知识库（机制/根因/处置手册）。
+        #     用归一化后的中文症状检索，不用数字错误码（两套编码体系不一致）；
+        #     知识库不可用时 diagnose_card 返回 None，静默降级，不影响主流程。
+        result["kb_card"] = kbcli.diagnose_card(P.normalize_skeleton(text))
 
         # ③ 规则引擎只读查库取证
         rule_res = eng.diagnose(rec)
@@ -118,6 +126,7 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None):
                 "text": text, "biz_type": rt.get("biz_type", "未知"),
                 "params": rule_res.get("params") if rule_res else None,
                 "cases": cases, "rule_res": rule_res,
+                "kb_card": result["kb_card"],
             }
             ans = llm.diagnose(ctx)
             if ans:
@@ -182,6 +191,11 @@ def render(res):
     if ev:
         L.append("【只读 SQL 查库证据（规则引擎）】")
         L += ev
+
+    kb_card = res.get("kb_card")
+    if kb_card:
+        L.append("【领域知识卡（Dimple 知识库 · 机制/根因/处置）】")
+        L += KnowledgeClient.to_report_lines(kb_card)
 
     a = res["answer"] or {}
     L.append("-" * W)
