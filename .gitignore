@@ -12,3 +12,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# ===== 本地工作/个人目录（不入库）=====
+/internship-logs/
