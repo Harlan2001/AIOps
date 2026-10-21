@@ -1,0 +1,38 @@
+# 诊断树：结算价不存在
+id: rb_settle_price
+title: 结算价不存在
+steps:
+  - id: is_trade_date
+    type: sql_check
+    title: 交易日检查
+    expect: {exists: true}
+    sql: "SELECT TRADE_DATE, NOTE FROM INTERFACE.TP_EXCH_TRADE_DATE WHERE TRADE_DATE=:trade_date"
+    on_fail:
+      root: "当日（{trade_date}）不在交易日历，或交易日历/节假日尚未配置"
+      action:
+        - "检查交易日历 INTERFACE.TP_EXCH_TRADE_DATE 与节假日表是否已维护到该日期"
+        - "确认为何非交易日触发了结算（可能是节假日未设置，见错误码 80800605）"
+
+  - id: price_latest
+    type: sql_query
+    title: 结算价表最新数据日期（旁证，判断数据是否已推进到报错日）
+    sql: "SELECT MAX(TRADE_DATE) AS LATEST_DATE FROM CLEAR.TC_CLEAR_PRICE"
+
+  - id: price_exists
+    type: sql_check
+    title: 结算价记录检查
+    primary: true
+    expect: {exists: true}
+    sql: "SELECT TRADE_DATE, CONTRACT_ID, CLEAR_PRICE, IF_MANUAL, REMARK FROM CLEAR.TC_CLEAR_PRICE WHERE TRADE_DATE=:trade_date AND CONTRACT_ID=:contract"
+    on_fail:
+      root: "结算价缺失：{contract} 在 {trade_date} 的结算价尚未生成（闭市后处理未执行/失败，或当日行情缺失）"
+      action:
+        - "在【结算价管理】中手工补录该合约当日结算价"
+        - "检查闭市后结算任务（PKC_MAIN / SP_CLOSE_CHECK_MAIN）是否已成功执行"
+        - "确认该合约当日是否有行情；补录或重跑成功后重新执行结算"
+
+default:
+  root: "{contract} 当日结算价已存在但仍报错，可能为结算流程内部状态异常"
+  action:
+    - "结合 LSECTION 定位的存储过程行号，检查结算主流程后续步骤"
+    - "检查是否重复结算或缓存了旧状态"

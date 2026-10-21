@@ -1,0 +1,37 @@
+# 诊断树：递延费率不存在
+id: rb_defer_fee
+title: 递延费率不存在
+steps:
+  - id: is_trade_date
+    type: sql_check
+    title: 交易日检查
+    expect: {exists: true}
+    sql: "SELECT TRADE_DATE, NOTE FROM INTERFACE.TP_EXCH_TRADE_DATE WHERE TRADE_DATE=:trade_date"
+    on_fail:
+      root: "当日（{trade_date}）不在交易日历，或交易日历/节假日尚未配置"
+      action:
+        - "检查交易日历与节假日表是否已维护到该日期"
+        - "确认为何非交易日触发了结算"
+
+  - id: fee_latest
+    type: sql_query
+    title: 递延费率表最新数据日期（旁证）
+    sql: "SELECT MAX(TRADE_DATE) AS LATEST_DATE FROM CLEAR.TC_DEFER_FEE_RATE"
+
+  - id: fee_exists
+    type: sql_check
+    title: 递延费率记录检查
+    primary: true
+    expect: {exists: true}
+    sql: "SELECT TRADE_DATE, CONTRACT_ID, MEMBER_ID, PAY_FLAG, DEFER_FEE FROM CLEAR.TC_DEFER_FEE_RATE WHERE TRADE_DATE=:trade_date AND CONTRACT_ID=:contract"
+    on_fail:
+      root: "递延费率缺失：{contract} 在 {trade_date} 的递延补偿费率尚未生成（费率参数未配置或闭市后处理未跑）"
+      action:
+        - "检查该合约的递延费率参数（保证金/费率参数管理）是否已配置"
+        - "检查闭市后结算任务（PKC_CLOSE / SP_CHK_CLOSE_AFTER、PKC_CLEAR_PARA）是否成功执行"
+        - "补录费率或重跑结算后重新执行"
+
+default:
+  root: "{contract} 当日递延费率已存在但仍报错，可能为结算流程内部状态异常"
+  action:
+    - "结合 LSECTION 行号检查结算/费率生成后续步骤"

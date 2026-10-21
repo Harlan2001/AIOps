@@ -1,0 +1,12 @@
+# LLM 诊断大脑配置模板（OpenAI 兼容接口）
+# 用法：复制本文件为 llm.yaml，填入真实值；llm.yaml 含密钥，切勿提交版本库/外发。
+#   copy config\llm.yaml.example config\llm.yaml
+#
+# 接入方式（任一）：
+#   1) 公有云 MaaS 网关（如阿里云 compatible-mode）：填 base_url / api_key / model
+#   2) 客户内网私有化：vLLM/Ollama/内网网关，OpenAI 兼容路径 .../v1
+enabled: false
+base_url: "https://<你的网关地址>/compatible-mode/v1"
+api_key: "<你的 API Key>"
+model: "qwen3.8-max"      # 以 GET /models 实际列出且本 Key 有权限的模型为准
+timeout: 150

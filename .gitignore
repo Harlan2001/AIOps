@@ -1,0 +1,14 @@
+# ===== 敏感配置（含 API Key，切勿提交）=====
+config/llm.yaml
+
+# ===== 数据与模型（本地生成，体积大）=====
+data/
+models/
+*.joblib
+*.csv
+
+# ===== Python =====
+__pycache__/
+*.pyc
+.venv/
+venv/

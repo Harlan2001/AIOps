@@ -1,0 +1,37 @@
+# 业务报错类型注册（运行时零模型）
+# 匹配优先级：骨架关键词命中（每个 +10）> 错误码命中（每个 +2），取得分最高的类型。
+# 注：同一错误码可能对应多种报错（如结算主流程通用错误码），故关键词优先。
+version: "1.0"
+types:
+  - id: settle_price_not_found
+    title: 结算价不存在
+    severity: error
+    keywords: ["结算价不存在"]
+    err_codes: [150302029, 101022001, 101022015, 101020206, 101020101]
+    param_alias:
+      "合约": "contract"
+      "期权合约": "contract"
+    runbook: rb_settle_price
+
+  - id: defer_fee_not_found
+    title: 递延费率不存在
+    severity: error
+    keywords: ["递延费率不存在"]
+    err_codes: [101022001, 101020101, 101022015, 101020206]
+    param_alias:
+      "合约": "contract"
+    runbook: rb_defer_fee
+
+  - id: position_not_enough
+    title: 平仓时持仓不足
+    severity: error
+    keywords: ["持仓不足"]
+    err_codes: [101028602, 101028605, 101028003, 201328003]
+    param_alias:
+      "会员": "member"
+      "客户": "client"
+      "交易员": "trader"
+      "成交编号": "match_no"
+      "合约": "contract"
+      "尚缺": "lack"
+    runbook: rb_position

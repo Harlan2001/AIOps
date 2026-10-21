@@ -1,0 +1,39 @@
+# 诊断树：平仓时持仓不足
+id: rb_position
+title: 平仓时持仓不足
+
+# 诊断日期取成交编号前 8 位（成交业务日期）
+date_from: {field: "match_no", regex: "^([0-9]{8})"}
+# 从原始文本额外抽取买卖方向
+extra_params:
+  bs_dir: {regex: "\\[([买卖])\\]"}
+
+steps:
+  - id: posi_latest
+    type: sql_query
+    title: 客户持仓表最新结算日（旁证）
+    sql: "SELECT MAX(CLEAR_DATE) AS LATEST_DATE FROM CLEAR.TC_FTR_CLIENT_POSI_CLEAR"
+
+  - id: client_posi
+    type: sql_check
+    title: 客户该合约当日持仓
+    primary: true
+    expect: {exists: true}
+    sql: "SELECT CLEAR_DATE, CLIENT_ID, MEMBER_ID, CONTRACT_ID, SH_FLAG, BUY_QTY, SELL_QTY FROM CLEAR.TC_FTR_CLIENT_POSI_CLEAR WHERE CLEAR_DATE=:trade_date AND MEMBER_ID=:member AND CLIENT_ID=:client AND CONTRACT_ID=:contract"
+    on_fail:
+      root: "客户持仓表无该会员/客户/合约的当日持仓记录（持仓未初始化或已全部平掉）"
+      action:
+        - "核对该客户该合约当日结算持仓是否已生成"
+        - "检查是否重复提交平仓、合约代码或买卖方向错误"
+
+  - id: detail_posi
+    type: sql_query
+    title: 持仓明细（按席位/交易员/买卖方向）
+    sql: "SELECT TRADE_DATE, MEMBER_ID, CLIENT_ID, TRADER_NO, BS_FLAG, SUM(QTY) AS QTY FROM CLEAR.TC_CLEAR_POSI_DETAIL WHERE TRADE_DATE=:trade_date AND MEMBER_ID=:member AND CLIENT_ID=:client AND CONTRACT_ID=:contract GROUP BY TRADE_DATE, MEMBER_ID, CLIENT_ID, TRADER_NO, BS_FLAG ORDER BY TRADER_NO, BS_FLAG"
+
+default:
+  root: "{bs_dir}方向持仓不足：{contract} 平仓量超过可平量，报错尚缺 {lack} 手（会员 {member} / 客户 {client} / 交易员 {trader} / 成交 {match_no}）"
+  action:
+    - "对照上方查询到的实际持仓量，核对该客户该合约{bs_dir}方向的可平量"
+    - "检查是否重复平仓、买卖方向选反，或当日已有同方向平仓占用可平量"
+    - "按可平量调减平仓数量后重新提交；注意可平量基数为当日结算后持仓量"
