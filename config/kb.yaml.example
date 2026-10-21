@@ -1,0 +1,33 @@
+# Dimple 知识库（领域知识层）配置 —— 脱敏模板
+# 用法：复制本文件为 config/kb.yaml，再按实际环境填写。
+#   cp config/kb.yaml.example config/kb.yaml      (Linux/Mac)
+#   Copy-Item config/kb.yaml.example config/kb.yaml   (PowerShell)
+# 知识库为只读、纯本地 BM25 检索，离线运行，无需网络 / 数据库 / API key / 向量库。
+
+# 总开关：关闭后编排层静默跳过知识检索（不影响 ML / 规则 / LLM 主流程）
+enabled: true
+
+# 知识包根目录（其下必须含 manifest.json）。
+#   - 本机开发：指向你本地解压的 dimple-knowledge-base-main 目录
+#   - 容器/部署：通常为 /app/kb（只读挂载或随镜像打入）
+kb_root: "/path/to/dimple-knowledge-base-main"
+
+# 受众（投影范围）：
+#   common            标准通用知识（默认，不含任何客户私有内容，适合交付/公开仓库）
+#   internal          内部全集（含内部实现，仅内部分析，禁止外发客户）
+#   <客户ID，如 abc>    客户专包（需先用 dimple_install 生成对应投影）
+audience: common
+
+# 知识基线：
+#   留空（""）        使用知识包自带基线（源码分析 SOURCE_ANALYSIS）
+#   unknown           现场版本未核实，只返回通用取证，不给基线专属结论
+baseline: ""
+
+# 每次诊断保留的父文档数量（1-10）
+top: 3
+
+# 关键安全开关：知识库返回的只读 SQL 是否允许自动执行。
+#   false（默认，推荐）：只读 SQL 仅作为建议喂给 LLM 与在报告中展示，不自动执行；
+#                        经人工审核并派生为 runbook 后，才由规则引擎执行。
+#   始终不变：唯一可执行的查库层是规则引擎，全程只读、写拦截、参数化绑定。
+execute_kb_sql: false
