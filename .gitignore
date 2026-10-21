@@ -1,5 +1,7 @@
 # ===== 敏感配置（含 API Key，切勿提交）=====
 config/llm.yaml
+# 知识库真实配置（含本机路径/受众范围）；只提交 kb.yaml.example 脱敏模板
+config/kb.yaml
 
 # ===== 数据与模型（本地生成，体积大）=====
 data/
