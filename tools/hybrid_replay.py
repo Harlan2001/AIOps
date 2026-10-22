@@ -8,17 +8,12 @@
 另给出"规则补齐 Top30 后"的预估 LLM 调用率（数据飞轮/规则扩展的降本趋势）。
 """
 import csv
-import os
-import sys
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-sys.path.insert(0, _ROOT)
+from ai_ops import paths
+from ai_ops.ml.router import Router
+from ai_ops.engine.rule_engine import Engine
 
-from ml.router import Router                 # noqa: E402
-from ai_ops.engine.rule_engine import Engine        # noqa: E402
-
-DATA = os.path.join(_ROOT, "data", "ml", "dataset.csv")
+DATA = str(paths.dataset_csv())
 
 
 def main():

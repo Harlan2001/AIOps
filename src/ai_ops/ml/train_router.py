@@ -11,23 +11,20 @@ import collections
 import csv
 import json
 import os
-import sys
 import random
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-sys.path.insert(0, _ROOT)
-
-from sklearn.model_selection import train_test_split          # noqa: E402
-from sklearn.feature_extraction.text import TfidfVectorizer    # noqa: E402
-from sklearn.linear_model import LogisticRegression            # noqa: E402
-from sklearn.pipeline import Pipeline                          # noqa: E402
-from sklearn.metrics import (classification_report, accuracy_score,  # noqa: E402
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import (classification_report, accuracy_score,
                              f1_score, confusion_matrix)
-import joblib                                                   # noqa: E402
+import joblib
 
-DATA = os.path.join(_ROOT, "data", "ml", "dataset.csv")
-MODEL_DIR = os.path.join(_ROOT, "models")
+from ai_ops import paths
+
+DATA = str(paths.dataset_csv())
+MODEL_DIR = str(paths.models_dir())
 random.seed(42)
 
 

@@ -8,18 +8,15 @@
 """
 import json
 import os
-import sys
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-sys.path.insert(0, _ROOT)
+import joblib
 
-import joblib   # noqa: E402
+from ai_ops import paths
 
 
 class Router:
     def __init__(self, model_dir=None):
-        model_dir = model_dir or os.path.join(_ROOT, "models")
+        model_dir = model_dir or str(paths.models_dir())
         self.cls_route = joblib.load(os.path.join(model_dir, "routing.joblib"))
         self.cls_biz = joblib.load(os.path.join(model_dir, "biz_type.joblib"))
         with open(os.path.join(model_dir, "meta.json"), "r", encoding="utf-8") as f:

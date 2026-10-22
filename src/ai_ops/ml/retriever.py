@@ -7,24 +7,25 @@
 """
 import collections
 import csv
-import os
-import sys
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-sys.path.insert(0, _ROOT)
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import linear_kernel
 
-from sklearn.feature_extraction.text import TfidfVectorizer   # noqa: E402
-from sklearn.metrics.pairwise import linear_kernel            # noqa: E402
+from ai_ops import paths
 
 
 class SimilarCaseIndex:
     def __init__(self, records):
         self.records = records
         self.texts = [r["text"] for r in records]
-        self.vec = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 4),
-                                   min_df=1, sublinear_tf=True)
-        self.matrix = self.vec.fit_transform(self.texts)
+        if records:
+            self.vec = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 4),
+                                       min_df=1, sublinear_tf=True)
+            self.matrix = self.vec.fit_transform(self.texts)
+        else:
+            # 数据集缺失时静默降级：无历史案例可召回（不阻断主流程）
+            self.vec = None
+            self.matrix = None
 
         # 预聚合：骨架 -> 统计信息
         self.groups = {}
@@ -45,12 +46,18 @@ class SimilarCaseIndex:
 
     @classmethod
     def from_dataset(cls, path=None):
-        path = path or os.path.join(_ROOT, "data", "ml", "dataset.csv")
-        with open(path, "r", encoding="utf-8-sig") as f:
-            records = [r for r in csv.DictReader(f) if r["cls"] == "biz"]
+        path = path or paths.dataset_csv()
+        try:
+            with open(path, "r", encoding="utf-8-sig") as f:
+                records = [r for r in csv.DictReader(f) if r["cls"] == "biz"]
+        except FileNotFoundError:
+            print("[召回] 数据集不存在（%s），相似案例召回降级为空" % path)
+            records = []
         return cls(records)
 
     def query(self, text, top_k=5):
+        if not self.records:
+            return []
         q = self.vec.transform([text])
         scores = linear_kernel(q, self.matrix).ravel()
         # 每个骨架只保留其最高实例分，按骨架去重排序

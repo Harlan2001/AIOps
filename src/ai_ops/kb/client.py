@@ -8,15 +8,16 @@
 - 知识库只读 SQL 默认不自动执行（execute_kb_sql=false），仅作为建议文本与报告展示；
 - 检索键使用中文症状（日志骨架），不使用 TLOG 数字错误码（两套编码体系不一致）。
 
-接入位置：hybrid_diagnose 在 ML 判为 biz 后，与"相似案例召回""规则查库"并行检索本层。
+接入位置：pipeline 在 ML 判为 biz 后，与"相似案例召回""规则查库"并行检索本层。
+配置优先级：默认值 < config/kb.yaml < AIOPS_KB_* 环境变量 < 显式构造参数。
 """
 import importlib.util
 import os
 import re
 import sys
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
+from ai_ops import evidence
+from ai_ops.config import load_config
 
 # 知识库诊断引擎（Knowledge 类）相对知识根的位置
 _ENGINE_REL = os.path.join(
@@ -27,63 +28,9 @@ _SCRIPTS_REL = os.path.join(
 _ENGINE_MODULE = "dimple_kb_engine"
 
 _SQL_LIMIT = 400       # 单条只读 SQL 进入提示词的最大字符
-_TXT_LIMIT = 200       # 单条文本截断
-
-
-def _coerce(val):
-    val = val.strip()
-    if (val.startswith('"') and val.endswith('"')) or \
-       (val.startswith("'") and val.endswith("'")):
-        val = val[1:-1]
-    low = val.lower()
-    if low in ("true", "false"):
-        return low == "true"
-    if val == "":
-        return ""
-    try:
-        return int(val)
-    except ValueError:
-        return val
-
-
-def _load_simple_yaml(path):
-    """极简 key: value 解析（kb.yaml 无嵌套结构）；PyYAML 缺失时兜底。"""
-    cfg = {}
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#") or ":" not in line:
-                continue
-            key, _, val = line.partition(":")
-            val = val.strip()
-            if " #" in val:
-                val = val.split(" #", 1)[0].rstrip()
-            cfg[key.strip()] = _coerce(val)
-    return cfg
-
-
-def _load_config(path):
-    if not os.path.isfile(path):
-        return {}
-    try:
-        import yaml  # type: ignore
-        with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        try:
-            return _load_simple_yaml(path)
-        except Exception:
-            return {}
-
-
-def _clip(s, n=_TXT_LIMIT):
-    s = str(s or "").replace("\n", " ").strip()
-    return s if len(s) <= n else s[:n] + "…"
-
 
 _PARAM_BLOCK_RE = re.compile(r"\[[^\]]*\]")
-_CN_PHRASE_RE = re.compile(r"[\u4e00-\u9fff]{2,}")
+_CN_PHRASE_RE = re.compile(r"[一-鿿]{2,}")
 
 
 def _clean_symptom(text):
@@ -96,22 +43,12 @@ def _clean_symptom(text):
     return " ".join(_CN_PHRASE_RE.findall(t))[:80]
 
 
-def _join(items, n=None):
-    if isinstance(items, str):
-        return items.strip()
-    items = [str(x).strip() for x in (items or []) if str(x).strip()]
-    if n:
-        items = items[:n]
-    return "；".join(items)
-
-
 class KnowledgeClient:
     """领域知识检索客户端（可降级）。"""
 
-    def __init__(self, cfg_path=None, kb_root=None, audience=None,
+    def __init__(self, kb_root=None, audience=None,
                  baseline=None, top=None, enabled=None):
-        cfg_path = cfg_path or os.path.join(_ROOT, "config", "kb.yaml")
-        cfg = _load_config(cfg_path)
+        cfg = load_config("kb")
         self.enabled = enabled if enabled is not None else bool(cfg.get("enabled", True))
         self.kb_root = kb_root or cfg.get("kb_root", "") or ""
         self.audience = audience if audience is not None else cfg.get("audience", "internal")
@@ -238,7 +175,7 @@ class KnowledgeClient:
                     "dialect": q.get("dialect", ""),
                     "row_boundary": q.get("row_boundary", ""),
                     "interpretation": q.get("interpretation", ""),
-                    "sql": _clip(q.get("sql", ""), _SQL_LIMIT),
+                    "sql": evidence.clip(q.get("sql", ""), _SQL_LIMIT),
                     "executed": q.get("executed", False),
                 })
             logs = []
@@ -288,85 +225,3 @@ class KnowledgeClient:
         """便捷方法：直接返回裁剪后的知识卡 dict；未命中 / 不可用返回 None。"""
         raw = self.diagnose_raw(symptom, table=table, top=top)
         return self.simplify(raw) if raw else None
-
-    # ---------------- 给 LLM 的提示词块 ----------------
-    @staticmethod
-    def to_prompt_block(card):
-        if not card or not card.get("cards"):
-            return "（知识库未命中相关诊断材料，本条请主要依据历史案例与现场查库证据判断。）"
-        L = []
-        L.append(
-            "以下是 Dimple 官方知识库（版本 %s，源码基线 %s）按症状检索到的诊断材料，"
-            "共命中相关父文档 %d 篇。\n"
-            "重要约束：这是【冻结源码取证】，runtime_verified=%s，未在现场核实；"
-            "其中只读 SQL 未在现场执行，不得声称已执行、不得据此臆测现场状态。"
-            "请用下面系统实际查到的库内证据去验证或排除这些候选分支，"
-            "处置建议必须遵守其允许/禁止条件、副作用与回退边界。"
-            % (card.get("knowledge_version", ""), card.get("baseline_id", ""),
-               card.get("matched_document_count", 0),
-               "true" if card.get("runtime_verified") else "false"))
-        for i, c in enumerate(card["cards"], 1):
-            L.append("\n[知识卡 %d] %s（文档 ID：%s，得分 %.1f）"
-                     % (i, c["title"], c["document_id"], c["score"]))
-            if c["symptom"]:
-                L.append("  症状：%s" % _clip(c["symptom"], 160))
-            if c["required_facts"]:
-                L.append("  必须先确认的事实：" + _join(c["required_facts"], 14))
-            if c["parameter_codes"]:
-                L.append("  相关参数：" + "、".join(map(str, c["parameter_codes"])))
-            for b in c["branches"]:
-                L.append("  ◆ 候选根因分支：%s" % b["id"])
-                if b["when_all"]:
-                    L.append("      成立条件：" + _join(b["when_all"]))
-                if b["exclude_when"]:
-                    L.append("      反证/不适用：" + _join(b["exclude_when"]))
-                if b["next_checks"]:
-                    L.append("      下一步只读检查：" + _join(b["next_checks"]))
-                for a in b["actions"]:
-                    if a["title"]:
-                        L.append("      候选处置：%s" % a["title"])
-                    if a["allowed_when"]:
-                        L.append("          允许条件：" + _join(a["allowed_when"]))
-                    if a["forbidden_when"]:
-                        L.append("          禁止条件：" + _join(a["forbidden_when"]))
-                    if a["side_effects"]:
-                        L.append("          副作用：" + _join(a["side_effects"]))
-                    if a["verification"]:
-                        L.append("          恢复验证：" + _join(a["verification"]))
-                    if a["rollback_boundary"]:
-                        L.append("          回退边界：" + _join(a["rollback_boundary"]))
-            for q in c["readonly_queries"]:
-                L.append("  只读SQL参考（%s，表 %s，方言 %s；需现场核对，禁止擅自执行）：%s"
-                         % (q["purpose"] or "-", q["table"] or "-",
-                            q["dialect"] or "-", q["sql"]))
-                if q["interpretation"]:
-                    L.append("      结果解释：%s" % _clip(q["interpretation"], 300))
-            for lg in c["log_context"]:
-                L.append("  日志锚点（%s/%s）：%s"
-                         % (lg.get("logger", ""), lg.get("level", ""),
-                            _clip(lg.get("template", ""), 160)))
-        return "\n".join(L)
-
-    # ---------------- 给 CLI 报告的知识卡文本 ----------------
-    @staticmethod
-    def to_report_lines(card):
-        if not card or not card.get("cards"):
-            return ["  （知识库未命中相关诊断材料）"]
-        L = ["  知识版本 %s｜基线 %s｜相关父文档 %d 篇｜状态：冻结源码取证，未现场核实"
-             % (card.get("knowledge_version", ""), card.get("baseline_id", ""),
-                card.get("matched_document_count", 0))]
-        for i, c in enumerate(card["cards"], 1):
-            L.append("  %d. [%.1f] %s（%s）" % (i, c["score"], c["title"], c["document_id"]))
-            L.append("       症状：%s" % (_clip(c["symptom"], 120) or "-"))
-            for b in c["branches"][:3]:
-                L.append("       · 根因分支 %s：%s"
-                         % (b["id"], _clip(_join(b["when_all"], 3), 120)))
-            if c["required_facts"]:
-                L.append("       · 需先确认：%s" % _clip(_join(c["required_facts"], 6), 200))
-            L.append("       · 取证材料：只读SQL模板 %d 条、日志锚点 %d 处（默认不自动执行）"
-                     % (c["n_queries"], c["n_logs"]))
-            if c["sources"]:
-                s = c["sources"][0]
-                L.append("       · 来源：%s %s %s"
-                         % (s.get("repository", ""), s.get("path", ""), s.get("symbol", "")))
-        return L

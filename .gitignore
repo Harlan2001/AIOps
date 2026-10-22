@@ -9,9 +9,6 @@ config/db.yaml
 /reports/
 /dist/
 *.egg-info/
-# TODO（提交4 物理迁入 var/ 后删除这两条）：迁移期 data/ models/ 仍在仓库根
-/data/
-/models/
 
 # ===== Python =====
 __pycache__/

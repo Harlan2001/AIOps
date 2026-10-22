@@ -8,16 +8,12 @@
 import collections
 import csv
 import os
-import sys
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-sys.path.insert(0, _ROOT)
+from ai_ops import paths
+from ai_ops.engine.db import get_conn
+from ai_ops.engine import parser as P
 
-from ai_ops.engine.db import get_conn          # noqa: E402
-from ai_ops.engine import parser as P          # noqa: E402
-
-OUT_DIR = os.path.join(_ROOT, "data", "ml")
+OUT_DIR = os.path.join(str(paths.data_dir()), "ml")
 TOP_N = 30
 FIELDS = ["id", "ldate", "llevel", "errcode", "func_no", "cls",
           "biz_type", "skeleton", "module", "deep_proc", "text", "lsection"]

@@ -1,14 +1,26 @@
 # -*- coding: utf-8 -*-
 """全项目唯一的路径解析层。
 
-优先级统一为：AIOPS_* 环境变量 > 仓库根（开发态，自动探测）> 容器默认路径 /app。
+优先级统一为：AIOPS_* 环境变量 > 仓库根下 var/（开发态，自动探测仓库根）
+> 容器默认路径 /app。
 - 开发态：本文件位于 <仓库根>/src/ai_ops/paths.py，向上查找同时含
   pyproject.toml 与 src/ai_ops 的目录即仓库根；
 - 容器/已安装态：探测不到仓库根，路径全部来自环境变量或 /app 默认值，
   绝不靠 cwd 或 __file__ 上两级猜测。
+
+var/ 整体 gitignore：模型、数据集、报告、KB 快照等运行时资产不入库，
+镜像构建时 COPY 内部制品或运行时挂载。
 """
 import os
 from pathlib import Path
+
+# 环境变量 -> (开发态相对仓库根路径, 容器默认路径)
+_DIRS = {
+    "config": ("config", "/app/config"),
+    "models": ("var/models", "/app/models"),
+    "data": ("var/data", "/app/data"),
+    "reports": ("var/reports", "/app/reports"),
+}
 
 
 def _detect_repo_root():
@@ -21,22 +33,23 @@ def _detect_repo_root():
 REPO_ROOT = _detect_repo_root()
 
 
-def _env_dir(name):
-    value = os.environ.get(name)
-    return Path(value) if value else None
-
-
-def _default(*, rel, container):
-    env = _env_dir("AIOPS_" + rel.upper() + "_DIR")
-    if env:
-        return env
-    if REPO_ROOT:
-        return REPO_ROOT / rel
-    return Path(container)
+def _dir(kind, *, env, create=False):
+    value = os.environ.get(env)
+    if value:
+        path = Path(value)
+    elif REPO_ROOT:
+        rel, _container = _DIRS[kind]
+        path = REPO_ROOT / rel
+    else:
+        _rel, container = _DIRS[kind]
+        path = Path(container)
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def config_dir():
-    return _default(rel="config", container="/app/config")
+    return _dir("config", env="AIOPS_CONFIG_DIR")
 
 
 def config_file(name):
@@ -45,11 +58,11 @@ def config_file(name):
 
 
 def models_dir():
-    return _default(rel="models", container="/app/models")
+    return _dir("models", env="AIOPS_MODELS_DIR")
 
 
 def data_dir():
-    return _default(rel="data", container="/app/data")
+    return _dir("data", env="AIOPS_DATA_DIR")
 
 
 def dataset_csv():
@@ -58,6 +71,4 @@ def dataset_csv():
 
 
 def reports_dir():
-    path = _default(rel="reports", container="/app/reports")
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    return _dir("reports", env="AIOPS_REPORTS_DIR", create=True)

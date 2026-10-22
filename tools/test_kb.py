@@ -2,17 +2,11 @@
 """领域知识层（Dimple KB）独立自测：不依赖 ML / 数据 / LLM。
 
 运行：
-    cd D:\\document\\yunwei\\dimple\\AIOps
-    python tools\\test_kb.py
+    uv run python tools/test_kb.py
 """
-import os
 import sys
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-sys.path.insert(0, _ROOT)
-
-from kb.client import KnowledgeClient  # noqa: E402
+from ai_ops.kb.client import KnowledgeClient
 
 CASES = ["持仓不足", "结算价不存在", "递延费率不存在", "用户名或密码错误"]
 

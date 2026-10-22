@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
 """诊断提示词构造：把报错、ML 召回的相似案例、领域知识卡、规则查库证据组装成 LLM 输入。"""
 import json
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from kb.client import KnowledgeClient  # noqa: E402
 
 SYSTEM = (
     "你是 DIMPLE 期货/黄金交易清算系统（Oracle 数据库）的资深运维与 DBA 专家。"
@@ -84,7 +79,7 @@ def build_messages(ctx):
             ctx.get("biz_type", "未知"),
             param_text,
             _fmt_cases(ctx.get("cases")),
-            KnowledgeClient.to_prompt_block(ctx.get("kb_card")),
+            ctx.get("kb_block") or "（无）",
             _fmt_evidence(ctx.get("rule_res")),
         )
     )

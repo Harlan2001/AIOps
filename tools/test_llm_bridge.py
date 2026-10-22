@@ -12,8 +12,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
 sys.path.insert(0, _ROOT)
 
-from llm.client import LLMClient          # noqa: E402
-import hybrid_diagnose                    # noqa: E402
+from ai_ops.llm.client import LLMClient   # noqa: E402
+import hybrid_diagnose                    # noqa: E402 （根 shim，提交8 删除）
 
 
 class MockHandler(BaseHTTPRequestHandler):

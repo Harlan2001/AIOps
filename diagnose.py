@@ -6,15 +6,11 @@
 - hybrid_diagnose.py 复用这里的 get_record_by_id。
 """
 import argparse
-import os
 import sys
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _HERE)
-
-from ai_ops.engine.db import get_conn            # noqa: E402
-from ai_ops.engine.rule_engine import Engine     # noqa: E402
-from ai_ops.engine.report import render          # noqa: E402
+from ai_ops.engine.db import get_conn
+from ai_ops.engine.rule_engine import Engine
+from ai_ops.engine.report import render
 
 
 def get_record_by_id(rec_id):

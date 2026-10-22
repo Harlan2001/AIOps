@@ -6,25 +6,17 @@
   编排层自动回退到规则引擎（保证离线、无 LLM 也能跑）。
 """
 import json
-import os
-import sys
 import urllib.request
 import urllib.error
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-sys.path.insert(0, _ROOT)
-
-import yaml   # noqa: E402
-
-from llm import prompts   # noqa: E402
+from ai_ops.config import load_config
+from ai_ops.llm import prompts
 
 
 class LLMClient:
-    def __init__(self, cfg_path=None):
-        cfg_path = cfg_path or os.path.join(_ROOT, "config", "llm.yaml")
-        with open(cfg_path, "r", encoding="utf-8") as f:
-            cfg = yaml.safe_load(f)
+    def __init__(self, cfg=None):
+        # 未配置 / 缺文件时 cfg 为 {}：available()=False，编排层静默回退规则
+        cfg = cfg if cfg is not None else load_config("llm")
         self.enabled = bool(cfg.get("enabled"))
         self.base_url = (cfg.get("base_url") or "").rstrip("/")
         self.api_key = cfg.get("api_key", "EMPTY")

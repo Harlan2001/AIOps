@@ -18,19 +18,16 @@
     python hybrid_diagnose.py --id xxx --fast     # 强制规则快速路径（不调 LLM）
 """
 import argparse
-import os
 import sys
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _HERE)
-
-from diagnose import get_record_by_id              # noqa: E402
-from ai_ops.engine import parser as P                     # noqa: E402
-from ai_ops.engine.rule_engine import Engine             # noqa: E402
-from ml.router import Router                       # noqa: E402
-from ml.retriever import SimilarCaseIndex         # noqa: E402
-from llm.client import LLMClient                  # noqa: E402
-from kb.client import KnowledgeClient             # noqa: E402
+from diagnose import get_record_by_id
+from ai_ops import evidence
+from ai_ops.engine import parser as P
+from ai_ops.engine.rule_engine import Engine
+from ai_ops.ml.router import Router
+from ai_ops.ml.retriever import SimilarCaseIndex
+from ai_ops.llm.client import LLMClient
+from ai_ops.kb.client import KnowledgeClient
 
 W = 96
 
@@ -127,6 +124,7 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None):
                 "params": rule_res.get("params") if rule_res else None,
                 "cases": cases, "rule_res": rule_res,
                 "kb_card": result["kb_card"],
+                "kb_block": evidence.to_prompt_block(result["kb_card"]),
             }
             ans = llm.diagnose(ctx)
             if ans:
@@ -195,7 +193,7 @@ def render(res):
     kb_card = res.get("kb_card")
     if kb_card:
         L.append("【领域知识卡（Dimple 知识库 · 机制/根因/处置）】")
-        L += KnowledgeClient.to_report_lines(kb_card)
+        L += evidence.to_report_lines(kb_card)
 
     a = res["answer"] or {}
     L.append("-" * W)
