@@ -1,0 +1,12 @@
+# Oracle 只读连接配置模板
+# 用法：复制本文件为 db.yaml，填入真实值；db.yaml 含口令，切勿提交版本库/外发。
+#   cp config/db.yaml.example config/db.yaml            (Linux/Mac)
+#   Copy-Item config/db.yaml.example config/db.yaml     (PowerShell)
+#
+# 安全要求：
+#   - 使用只读账号；代码层另有写操作拦截（禁 INSERT/UPDATE/DELETE/DDL）；
+#   - 内网 DSN，禁止暴露到公网；
+#   - 真实口令若曾进入版本历史，必须轮换并评估清理历史。
+user: "<只读账号>"
+password: "<只读口令>"
+dsn: "<主机IP>:<端口>/<服务名，如 10.0.0.1:1521/orclpdb>"

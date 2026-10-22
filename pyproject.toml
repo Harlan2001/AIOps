@@ -1,0 +1,37 @@
+[project]
+name = "ai-ops"
+version = "0.1.0"
+description = "数据库业务报错智能诊断系统：LLM+ML+只读规则+Dimple 知识库混合诊断内核（私有化 Web 工作台）"
+readme = "README.md"
+authors = [
+    { name = "HARLAN XU", email = "xuziliang9@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "joblib>=1.6.0",
+    "numpy>=2.5.4",
+    "oracledb>=26.0.1",
+    "pyyaml>=6.0.3",
+    "scikit-learn>=1.9.1",
+    "scipy>=1.18.1",
+]
+
+[project.optional-dependencies]
+# P1 服务化才安装（FastAPI 薄封装内核 + MySQL 业务库）；未装时 ai-ops api 子命令延迟报错
+api = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "pydantic>=2", "pymysql>=1.1"]
+# P1 演示前端（Streamlit）
+demo = ["streamlit>=1.30"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[project.scripts]
+ai-ops = "ai_ops.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.10,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

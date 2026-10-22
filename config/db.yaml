@@ -1,6 +1,0 @@
-# DIMPLE Oracle 只读连接配置（TLOG 诊断 MVP）
-# 注意：交付物只含只读连接，不包含任何模型 / 推理 endpoint。
-user: system
-password: oracle
-dsn: 10.253.162.172:1521/dmpdb
-readonly: true
