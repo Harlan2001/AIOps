@@ -1,0 +1,22 @@
+# 口径与 .gitignore 对齐：密钥、运行时大资产、本地环境绝不进镜像构建上下文
+.git
+.gitignore
+.dockerignore
+
+# 真实配置（含密钥/口令；镜像内由挂载或环境变量注入）
+config/db.yaml
+config/llm.yaml
+config/kb.yaml
+
+# 运行时数据与产物（镜像按需 COPY 内部制品，不进构建上下文）
+var/
+reports/
+dist/
+.venv/
+venv/
+**/__pycache__/
+*.pyc
+
+# 本地工作目录
+internship-logs/
+docs/

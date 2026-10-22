@@ -1,13 +1,17 @@
-# ===== 敏感配置（含 API Key，切勿提交）=====
+# ===== 敏感配置（含 API Key / 数据库口令，切勿提交；仓库只保留 *.example 模板）=====
 config/llm.yaml
-# 知识库真实配置（含本机路径/受众范围）；只提交 kb.yaml.example 脱敏模板
 config/kb.yaml
+config/db.yaml
 
-# ===== 数据与模型（本地生成，体积大）=====
-data/
-models/
-*.joblib
-*.csv
+# ===== 运行时数据与产物（模型 / 数据集 / 报告 / 日志 / KB 快照，不入库）=====
+# 测试夹具等需要入库的小样本 CSV 请放在 tests/fixtures/（不在 /var/ 下，不会被忽略）
+/var/
+/reports/
+/dist/
+*.egg-info/
+# TODO（提交4 物理迁入 var/ 后删除这两条）：迁移期 data/ models/ 仍在仓库根
+/data/
+/models/
 
 # ===== Python =====
 __pycache__/

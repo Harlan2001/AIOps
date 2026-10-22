@@ -1,0 +1,7 @@
+# Windows 开发 + Linux 镜像：shell / SQL / 配置脚本统一 LF，避免容器内执行失败
+* text=auto
+*.sh   text eol=lf
+*.sql  text eol=lf
+*.py   text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
