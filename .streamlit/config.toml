@@ -1,0 +1,16 @@
+# Streamlit 演示前脸本地配置（仅开发态；正式版为 FastAPI + Vue3）
+[server]
+address = "127.0.0.1"
+port = 8501
+headless = true
+runOnSave = false
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+primaryColor = "#0969da"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f6f8fa"
+textColor = "#1f2328"
+font = "sans serif"

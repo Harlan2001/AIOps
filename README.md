@@ -72,6 +72,7 @@ AIOps/
 ```powershell
 uv sync                      # 安装内核依赖（需 uv 0.12+，Python 3.12）
 uv sync --extra api          # 服务化阶段才需要（fastapi/uvicorn/pymysql）
+uv sync --extra demo         # Streamlit 演示前脸（汇报/客户演示用）
 ```
 
 - 主要依赖 `scikit-learn`、`numpy`、`scipy`、`joblib`、`oracledb`、`pyyaml`。
