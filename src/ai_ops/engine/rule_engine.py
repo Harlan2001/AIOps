@@ -1,25 +1,18 @@
 # -*- coding: utf-8 -*-
 """规则引擎（运行时零模型）：正则解析 -> 类型匹配 -> 参数化只读 SQL 诊断树 -> 结构化结论。"""
-import os
 import re
 from collections import defaultdict
 
-import yaml
+from ai_ops import rules_store
+from ai_ops.engine import parser as P
+from ai_ops.engine.db import get_conn
 
-from engine import parser as P
-from engine.db import get_conn
-
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_RULES = os.path.join(_ROOT, "rules")
 _BIND_RE = re.compile(r":(\w+)")
 
 
 class Engine:
     def __init__(self):
-        with open(os.path.join(_RULES, "errors.yaml"), "r", encoding="utf-8") as f:
-            self.types = yaml.safe_load(f)["types"]
-        with open(os.path.join(_RULES, "noise_rules.yaml"), "r", encoding="utf-8") as f:
-            self.noise_kw = yaml.safe_load(f)["noise_contains"]
+        self.types, self.noise_kw = rules_store.load_registries()
         self._runbooks = {}
         self._conn = None
 
@@ -49,9 +42,7 @@ class Engine:
 
     def _load_runbook(self, name):
         if name not in self._runbooks:
-            path = os.path.join(_RULES, "runbooks", name + ".yaml")
-            with open(path, "r", encoding="utf-8") as f:
-                self._runbooks[name] = yaml.safe_load(f)
+            self._runbooks[name] = rules_store.load_runbook(name)
         return self._runbooks[name]
 
     def match_type(self, text, errcode):

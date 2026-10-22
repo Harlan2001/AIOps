@@ -8,10 +8,10 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
 sys.path.insert(0, _ROOT)
 
-from engine.db import get_conn          # noqa: E402
-from engine import parser as P          # noqa: E402
-from engine.rule_engine import Engine   # noqa: E402
-from engine.report import render        # noqa: E402
+from ai_ops.engine.db import get_conn          # noqa: E402
+from ai_ops.engine import parser as P          # noqa: E402
+from ai_ops.engine.rule_engine import Engine   # noqa: E402
+from ai_ops.engine.report import render        # noqa: E402
 
 
 def main():

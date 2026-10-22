@@ -7,7 +7,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
 sys.path.insert(0, _ROOT)
 
-from engine.rule_engine import Engine   # noqa: E402
+from ai_ops.engine.rule_engine import Engine   # noqa: E402
 
 eng = Engine()
 

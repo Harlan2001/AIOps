@@ -6,7 +6,7 @@ import sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
 sys.path.insert(0, _ROOT)
-from engine.db import get_conn          # noqa: E402
+from ai_ops.engine.db import get_conn          # noqa: E402
 
 conn = get_conn()
 cur = conn.cursor()

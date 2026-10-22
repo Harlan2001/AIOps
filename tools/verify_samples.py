@@ -8,8 +8,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
 sys.path.insert(0, _ROOT)
 
-from engine.db import get_conn          # noqa: E402
-from engine import parser as P          # noqa: E402
+from ai_ops.engine.db import get_conn          # noqa: E402
+from ai_ops.engine import parser as P          # noqa: E402
 
 CASES = {
     "结算价不存在": "%结算价不存在%",

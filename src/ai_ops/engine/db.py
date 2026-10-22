@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 """只读 Oracle 连接封装（基于 python-oracledb thin 模式，无需客户端）。
 
-- 连接配置来自 config/db.yaml
+- 连接配置来自 config/db.yaml（经 ai_ops.config 加载，支持环境变量覆盖）
 - 提供 query()：仅允许 SELECT；任何写操作直接拒绝
 """
-import os
 import re
-import yaml
+
 import oracledb
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from ..config import load_config
 
 _WRITE_RE = re.compile(
     r"^\s*(insert|update|delete|merge|create|drop|alter|truncate|grant|revoke|lock|comment)\b",
@@ -17,13 +16,8 @@ _WRITE_RE = re.compile(
 )
 
 
-def load_db_config():
-    with open(os.path.join(_ROOT, "config", "db.yaml"), "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
 def get_conn():
-    cfg = load_db_config()
+    cfg = load_config("db", required=True)
     return oracledb.connect(user=cfg["user"], password=cfg["password"], dsn=cfg["dsn"])
 
 

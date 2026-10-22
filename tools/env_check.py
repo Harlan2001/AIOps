@@ -30,11 +30,11 @@ for mod, dist in pkgs:
 print("\n[2] 关键文件 / 模型 / 数据")
 for rel in ["diagnose.py", "hybrid_diagnose.py", "config/db.yaml", "config/llm.yaml",
             "models/routing.joblib", "models/biz_type.joblib",
-            "data/ml/dataset.csv", "rules/errors.yaml"]:
+            "data/ml/dataset.csv", "src/ai_ops/assets/rules/errors.yaml"]:
     print("  %s  %s" % ("[OK]  " if os.path.exists(os.path.join(_ROOT, rel)) else "[缺失]", rel))
 
 print("\n[3] 本地模块导入")
-for mod in ["diagnose", "engine.parser", "engine.rule_engine", "ml.router",
+for mod in ["diagnose", "ai_ops.engine.parser", "ai_ops.engine.rule_engine", "ml.router",
             "ml.retriever", "llm.client"]:
     try:
         importlib.import_module(mod)
@@ -54,7 +54,7 @@ except Exception as e:
 
 print("\n[5] 数据库连通（只读 SELECT 1 FROM DUAL）")
 try:
-    from engine.db import query
+    from ai_ops.engine.db import query
     cols, rows = query("SELECT 1 FROM DUAL")
     print("  [OK]  Oracle 连通，返回", rows)
 except Exception as e:

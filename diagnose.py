@@ -12,9 +12,9 @@ import sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 
-from engine.db import get_conn            # noqa: E402
-from engine.rule_engine import Engine     # noqa: E402
-from engine.report import render          # noqa: E402
+from ai_ops.engine.db import get_conn            # noqa: E402
+from ai_ops.engine.rule_engine import Engine     # noqa: E402
+from ai_ops.engine.report import render          # noqa: E402
 
 
 def get_record_by_id(rec_id):

@@ -25,8 +25,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 
 from diagnose import get_record_by_id              # noqa: E402
-from engine import parser as P                     # noqa: E402
-from engine.rule_engine import Engine             # noqa: E402
+from ai_ops.engine import parser as P                     # noqa: E402
+from ai_ops.engine.rule_engine import Engine             # noqa: E402
 from ml.router import Router                       # noqa: E402
 from ml.retriever import SimilarCaseIndex         # noqa: E402
 from llm.client import LLMClient                  # noqa: E402
