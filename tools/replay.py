@@ -11,7 +11,7 @@ sys.path.insert(0, _ROOT)
 from ai_ops.engine.db import get_conn          # noqa: E402
 from ai_ops.engine import parser as P          # noqa: E402
 from ai_ops.engine.rule_engine import Engine   # noqa: E402
-from ai_ops.engine.report import render        # noqa: E402
+from ai_ops.reporting import render_rule as render  # noqa: E402
 
 
 def main():
