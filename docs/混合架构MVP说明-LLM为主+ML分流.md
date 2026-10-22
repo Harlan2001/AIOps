@@ -17,6 +17,11 @@
 LLM 单条强但有三个短板，正好由 ML 补齐：上下文装不下十万条日志、逐条调用贵且慢、不会从历史分布做统计。
 LLM 还缺两样东西：**Dimple 业务机制的权威知识**（不能靠通用常识瞎猜业务规则）和**确定性的现场事实**（不能只读日志就断言库里状态）——前者由知识库补、后者由规则只读查库补。
 
+造一点时间序列数据，做预测告警
+
+序列不一定是时间，原则上前序后序的关联度也可以作为自变量
+
+
 ## 二、处理流程
 
 ```
@@ -73,7 +78,7 @@ TLOG 报错
 - **零额外基础设施**：纯本地 BM25、离线、无网络、无数据库、无 API key、无向量库。
 - **可降级**：知识库缺失/关闭/异常时自动跳过，主流程不受影响。
 
-**知识检索自测命中（`tools/test_kb.py`）**：
+**知识检索自测命中（重构后命令：`uv run python -m ai_ops.ops.kb_selftest`）**：
 
 | 中文症状 | 命中文档数 | Top1 文档（相关度） |
 |---|---|---|
@@ -107,8 +112,8 @@ TLOG 报错
 ## 七、合规与部署
 
 - **LLM（已接入真实端点）**：`config/llm.yaml` 现已接入阿里云 MaaS OpenAI 兼容网关（compatible-mode），模型 `qwen3.8-max`（该 Key 实测授权，备选 `deepseek-v4-pro`）。面向客户交付时改为内网私有化部署（vLLM / Ollama / 内网网关，路径同为 `.../v1`），数据不出内网、无公网 token。`enabled=false` 或调用失败/超时，系统自动降级为"规则 + 知识库"、离线可跑。
-  - **选模型**：`python tools/llm_models.py` 列出网关全部模型，`python tools/llm_probe_models.py` 逐个探测本 Key 实际有权限的模型（`/models` 能列出 ≠ 有调用权限，未授权会返回 403 `access_denied`）。
-  - **自检**：`python tools/llm_ping.py` 做最小连通测试；`python tools/test_llm_bridge.py` 用本地 mock 离线验证调用链路。
+  - **选模型**：`uv run python -m ai_ops.ops.llm_probe --models` 列出网关全部模型（`/models` 能列出 ≠ 有调用权限，未授权会返回 403 `access_denied`）。
+  - **自检**：`uv run python -m ai_ops.ops.llm_probe` 做最小连通测试；`uv run pytest tests/integration` 用本地 mock 离线验证调用链路。
   - **安全**：`config/llm.yaml` 含密钥、已加入 `.gitignore`，切勿提交/外发；对外只提供 `config/llm.yaml.example` 模板。
 - **ML 模型**：两个 sklearn 线性模型（共约 1.7MB），CPU 即可，无需 GPU；随规则/数据迭代离线重训。
 - **Dimple 知识库**：纯本地只读文件快照（BM25，纯标准库，无网络/数据库/API key/向量库）；`config/kb.yaml` 配置 `kb_root/audience/baseline/top/execute_kb_sql`。交付客户用 `dimple_install` 生成**客户专包**挂载到 `/app/kb`，内部全集不得外发；知识快照不含源码、凭据、客户数据；版本更新走知识库自带流程、产品侧只替换快照并回归。
@@ -117,11 +122,16 @@ TLOG 报错
 
 ## 八、目录结构（AIOps）
 
+> **注**：本节为 MVP 时期（扁平结构）的快照；2026-10 已重构为单包 `ai_ops`（src 布局），
+> 现行目录以 README《三、目录结构》与 `docs/adr/0001-单包src布局与目录约定.md` 为准：
+> 内核在 `src/ai_ops/`（入口 `uv run ai-ops`）、评估脚本在 `scripts/`、自检在 `ai_ops.ops`、
+> 测试在 `tests/`、运行时资产在 `var/`。下方树保留历史语境。
+
 ```
 AIOps/
 ├── hybrid_diagnose.py          ★ 混合架构诊断入口（ML分流→召回→知识库→规则→决策门→LLM）
 ├── diagnose.py                 基础诊断 / 按 ID 取记录等数据读取
-├── requirements.txt
+├── pyproject.toml              uv 工程（重构后单包 ai_ops，src 布局）
 ├── config/
 │   ├── db.yaml                 Oracle 只读连接（DSN / 账号）
 │   ├── llm.yaml(.example)      LLM 配置（已接入 qwen3.8-max；.example 为脱敏模板）
@@ -160,19 +170,18 @@ AIOps/
 
 ```powershell
 $env:PYTHONIOENCODING="utf-8"
-cd D:\document\yunwei\dimple\AIOps
 
-python tools\test_kb.py                          # 0. 知识库独立自测（最先验证 KB 集成）
-python hybrid_diagnose.py --id 4811525544        # 1. 混合诊断（默认自动决策，报告含知识卡）
-python hybrid_diagnose.py --id 4811525544 --llm  #    强制走 LLM（三证合一）
-python hybrid_diagnose.py --id 4811525544 --fast #    强制规则快速路径
-python hybrid_diagnose.py --text "[合约=>Au9999]结算价不存在"   # 直接粘贴文本
-python tools\hybrid_replay.py                    # 2. 分流与 LLM 调用成本测算
-python ml\dataset.py                             # 3. （重训时）构建数据集
-python ml\train_router.py                        #    训练 ML 分流模型
+uv run python -m ai_ops.ops.kb_selftest          # 0. 知识库独立自测（最先验证 KB 集成）
+uv run ai-ops --id 4811525544                    # 1. 混合诊断（默认自动决策，报告含知识卡）
+uv run ai-ops --id 4811525544 --llm              #    强制走 LLM（三证合一）
+uv run ai-ops --id 4811525544 --fast             #    强制规则快速路径
+uv run ai-ops --text "[合约=>Au9999]结算价不存在"   # 直接粘贴文本
+uv run python scripts/hybrid_replay.py           # 2. 分流与 LLM 调用成本测算
+uv run python -m ai_ops.ml.dataset               # 3. （重训时）构建数据集
+uv run python -m ai_ops.ml.train_router          #    训练 ML 分流模型
 ```
 
-接入 LLM：复制 `config/llm.yaml.example` 为 `config/llm.yaml`，置 `enabled=true` 并填写 `base_url/api_key/model`；先用 `tools/llm_models.py`、`tools/llm_probe_models.py` 确认可用模型，`tools/llm_ping.py` 自检。客户内网部署时把 `base_url` 换成内网 vLLM/Ollama 地址即可。
+接入 LLM：复制 `config/llm.yaml.example` 为 `config/llm.yaml`，置 `enabled=true` 并填写 `base_url/api_key/model`；先用 `uv run python -m ai_ops.ops.llm_probe --models` 确认可用模型、`uv run python -m ai_ops.ops.llm_probe` 自检。客户内网部署时把 `base_url` 换成内网 vLLM/Ollama 地址即可。
 接入知识库：在 `config/kb.yaml` 置 `enabled=true`、`kb_root` 指向知识快照根（含 `manifest.json`），交付客户改用客户专包并设置对应 `audience`。
 
 ## 十、对应"ML 一定要有 / 不只靠 LLM"的落地结论
