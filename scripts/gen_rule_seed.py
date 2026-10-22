@@ -1,28 +1,24 @@
 # -*- coding: utf-8 -*-
 """从 ULOG.TLOG 历史报错自动生成"规则种子清单"（纯规则，零模型）。
 
-输出：
-  data/rule_seed.csv   业务报错类型种子（人工/LLM 蒸馏成 runbook 的输入）
-  data/rule_seed.yaml  结构化版本
-  data/ora_seed.csv    Oracle 技术错误种子（本期不做，备用）
-  stdout               分类统计 / Top-N 覆盖率 / 待核对的 other 样例
+输出（var/data/）：
+  rule_seed.csv   业务报错类型种子（人工/LLM 蒸馏成 runbook 的输入）
+  rule_seed.yaml  结构化版本
+  ora_seed.csv    Oracle 技术错误种子（本期不做，备用）
+  stdout          分类统计 / Top-N 覆盖率 / 待核对的 other 样例
 """
-import os
-import sys
 import csv
+import os
 from collections import Counter, defaultdict
 from datetime import datetime
 
 import yaml
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-sys.path.insert(0, _ROOT)
+from ai_ops import paths
+from ai_ops.engine.db import get_conn
+from ai_ops.engine import parser as P
 
-from ai_ops.engine.db import get_conn           # noqa: E402
-from ai_ops.engine import parser as P           # noqa: E402
-
-DATA = os.path.join(_ROOT, "data")
+DATA = str(paths.data_dir())
 os.makedirs(DATA, exist_ok=True)
 
 
@@ -192,7 +188,7 @@ def main():
     for skel, c in sorted(other.items(), key=lambda x: -x[1]):
         print("  %6d  %s" % (c, skel))
 
-    print("\n已生成：data/rule_seed.csv, data/rule_seed.yaml, data/ora_seed.csv, data/noise_seed.csv")
+    print("\n已生成：%s/{rule_seed.csv, rule_seed.yaml, ora_seed.csv, noise_seed.csv}" % DATA)
 
 
 if __name__ == "__main__":

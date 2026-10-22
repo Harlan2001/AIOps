@@ -1,15 +1,9 @@
 # -*- coding: utf-8 -*-
 """用真实报错样本验证 runbook 候选只读 SQL（零模型）。"""
-import os
 import re
-import sys
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-sys.path.insert(0, _ROOT)
-
-from ai_ops.engine.db import get_conn          # noqa: E402
-from ai_ops.engine import parser as P          # noqa: E402
+from ai_ops.engine.db import get_conn
+from ai_ops.engine import parser as P
 
 CASES = {
     "结算价不存在": "%结算价不存在%",

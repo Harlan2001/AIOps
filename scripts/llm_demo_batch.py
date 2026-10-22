@@ -1,16 +1,9 @@
 # -*- coding: utf-8 -*-
 """批量演示：对 7 条覆盖不同大类的真实报错强制走 LLM 诊断，
-结果同时打印到控制台，并写入 reports/llm_demo_result.txt。
+结果同时打印到控制台，并写入 var/reports/llm_demo_result.txt。
 """
-import os
-import sys
-
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-sys.path.insert(0, _ROOT)
-
-from diagnose import get_record_by_id   # noqa: E402
-import hybrid_diagnose as hd            # noqa: E402
+from ai_ops import paths, pipeline, reporting
+from ai_ops.engine.tlog import get_record_by_id
 
 # (日志ID, 说明, 是否已建规则)
 SAMPLES = [
@@ -25,8 +18,7 @@ SAMPLES = [
 
 
 def main():
-    report_dir = os.path.join(_ROOT, "reports")
-    os.makedirs(report_dir, exist_ok=True)
+    report_dir = paths.reports_dir()
     chunks = []
     for i, (sid, desc, has_rule) in enumerate(SAMPLES, 1):
         print("\n\n[%d/%d] %s  (ID=%s) ..." % (i, len(SAMPLES), desc, sid), flush=True)
@@ -34,14 +26,14 @@ def main():
         if not rec:
             print("  未找到 ID=%s 的日志" % sid)
             continue
-        res = hd.diagnose(rec, force_llm=True)
-        text = hd.render(res)
+        res = pipeline.diagnose(rec, force_llm=True)
+        text = reporting.render_hybrid(res)
         print(text, flush=True)
         chunks.append("\n\n" + "#" * 100
                       + "\n# %d. %s\n# 日志ID=%s  规则覆盖=%s\n"
                       % (i, desc, sid, "是" if has_rule else "否") + "#" * 100 + "\n" + text)
 
-    out = os.path.join(report_dir, "llm_demo_result.txt")
+    out = report_dir / "llm_demo_result.txt"
     with open(out, "w", encoding="utf-8") as f:
         f.write("\n".join(chunks))
     print("\n\n全部完成，结果已写入：%s" % out, flush=True)

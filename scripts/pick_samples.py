@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
 """从数据集中挑选覆盖不同业务类型的代表性真实报错 ID（含完整参数、优先取有具体值的）。"""
 import csv
-import os
-import sys
 from collections import defaultdict
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-DATA = os.path.join(_ROOT, "data", "ml", "dataset.csv")
+from ai_ops import paths
+
+DATA = str(paths.dataset_csv())
 
 # 想覆盖的类型关键词（覆盖数据缺失/操作失败/规则校验/权限/持仓等不同大类）
 WANT = [

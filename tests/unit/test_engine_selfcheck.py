@@ -1,15 +1,8 @@
 # -*- coding: utf-8 -*-
-"""引擎分类/匹配自测（不连库，纯逻辑）。"""
-import os
-import sys
+"""引擎分类/类型匹配自测（不连库，纯逻辑），由 tools/selfcheck.py 迁入。"""
+import pytest
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-sys.path.insert(0, _ROOT)
-
-from ai_ops.engine.rule_engine import Engine   # noqa: E402
-
-eng = Engine()
+from ai_ops.engine.rule_engine import Engine
 
 CASES = [
     ("无需要发送的DAMS数据！", 0, "noise"),
@@ -23,19 +16,20 @@ CASES = [
     ("系统不存在该条记录,存续期变更失败", 100007602, "biz_unmatched"),       # 尚未配规则
 ]
 
-print("=" * 80)
-ok = True
-for text, code, expect in CASES:
-    cls = eng._classify(text, code)
+
+@pytest.fixture(scope="module")
+def eng():
+    e = Engine()
+    yield e
+    e.close()
+
+
+@pytest.mark.parametrize("text,errcode,expect", CASES)
+def test_classify_and_match(eng, text, errcode, expect):
+    cls = eng._classify(text, errcode)
     if cls == "biz":
-        t, score = eng.match_type(text, code)
+        t, _score = eng.match_type(text, errcode)
         got = t["id"] if t else "biz_unmatched"
     else:
         got = cls
-    flag = "OK " if got == expect else "FAIL"
-    if got != expect:
-        ok = False
-    print("[%s] 期望=%-24s 实际=%-24s | %s" % (flag, expect, got, text[:40]))
-print("=" * 80)
-print("全部通过" if ok else "存在失败项")
-eng.close()
+    assert got == expect

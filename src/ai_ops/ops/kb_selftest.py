@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """领域知识层（Dimple KB）独立自测：不依赖 ML / 数据 / LLM。
 
-运行：
-    uv run python tools/test_kb.py
+    uv run python -m ai_ops.ops.kb_selftest
 """
 import sys
 
+from ai_ops import evidence
 from ai_ops.kb.client import KnowledgeClient
 
 CASES = ["持仓不足", "结算价不存在", "递延费率不存在", "用户名或密码错误"]
@@ -46,7 +46,7 @@ def main():
     print("=" * 88)
     print("【三证合一·领域知识提示词块示例（持仓不足，前 22 行）】")
     card = kb.diagnose_card("持仓不足", top=1)
-    for line in kb.to_prompt_block(card).splitlines()[:22]:
+    for line in evidence.to_prompt_block(card).splitlines()[:22]:
         print(line)
 
     print("=" * 88)
