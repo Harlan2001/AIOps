@@ -21,7 +21,8 @@ _ENV_PREFIX = {
 
 # 允许被环境变量覆盖的字段（值为环境变量后缀，统一大写下划线）
 _OVERRIDES = {
-    "db": {"user": "USER", "password": "PASSWORD", "dsn": "DSN"},
+    "db": {"user": "USER", "password": "PASSWORD", "host": "HOST",
+           "port": "PORT", "database": "DATABASE"},
     "llm": {"enabled": "ENABLED", "base_url": "BASE_URL", "api_key": "API_KEY",
             "model": "MODEL", "timeout": "TIMEOUT"},
     "kb": {"enabled": "ENABLED", "kb_root": "ROOT", "audience": "AUDIENCE",
@@ -29,7 +30,7 @@ _OVERRIDES = {
 }
 
 _BOOL = {"enabled", "execute_kb_sql"}
-_INT = {"timeout", "top"}
+_INT = {"timeout", "top", "port"}
 
 
 def _coerce(key, value):

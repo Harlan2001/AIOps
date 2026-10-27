@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""环境自检：Python/依赖、关键资产路径、包模块导入、LLM 配置、Oracle 连通。
+"""环境自检：Python/依赖、关键资产路径、包模块导入、LLM 配置、GaussDB 连通。
 新机器或新容器跑一遍即可知道缺什么：
 
     uv run python -m ai_ops.ops.doctor
@@ -9,7 +9,7 @@ import sys
 
 from ai_ops import paths, rules_store
 
-_PKGS = [("yaml", "PyYAML"), ("oracledb", "oracledb"), ("sklearn", "scikit-learn"),
+_PKGS = [("yaml", "PyYAML"), ("py_opengauss", "py-opengauss"), ("sklearn", "scikit-learn"),
          ("joblib", "joblib"), ("numpy", "numpy"), ("scipy", "scipy")]
 
 _MODULES = ["ai_ops.cli", "ai_ops.pipeline", "ai_ops.reporting",
@@ -72,11 +72,11 @@ def main():
     else:
         print("  [未配置] config/llm.yaml 缺失：诊断将走规则/兜底快速路径（离线可跑）")
 
-    print("\n[5] 数据库连通（只读 SELECT 1 FROM DUAL）")
+    print("\n[5] 数据库连通（只读 SELECT 1）")
     try:
         from ai_ops.engine.db import query
-        _cols, rows = query("SELECT 1 FROM DUAL")
-        print("  [OK]  Oracle 连通，返回", rows)
+        _cols, rows = query("SELECT 1")
+        print("  [OK]  GaussDB 连通，返回", rows)
     except Exception as e:
         print("  [失败]", repr(e))
 
