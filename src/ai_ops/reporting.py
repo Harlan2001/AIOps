@@ -24,31 +24,21 @@ def _fmt_evidence(rule_res):
 
 
 def render_hybrid(res):
-    """混合管线 diagnose() 结果 -> CLI 文本报告。"""
-    L = ["=" * W, "【TLOG 智能诊断报告 · ML 分流 + 规则取证 + LLM 大脑】", "=" * W]
+    """诊断管线 diagnose() 结果 -> CLI 文本报告。"""
+    L = ["=" * W, "【智能诊断报告 · 规则分流 + 查库取证 + LLM 大脑】", "=" * W]
     L.append("报错时间 : %s" % res["ldate"])
     L.append("错误码   : %s" % res["errcode"])
     if res["loc"]:
         L.append("报错位置 : %s" % res["loc"])
     L.append("报错文本 : %s" % res["text"][:200])
-    rt = res["rt"]
-    L.append("-" * W)
-    L.append("【ML 分流】路由=%s 置信度=%.3f" % (rt["route"], rt["confidence"]))
-    if rt.get("biz_type"):
-        L.append("    业务类型=%s 类型置信度=%.3f %s"
-                 % (rt["biz_type"], rt.get("biz_conf", 0.0),
-                    "（高置信）" if rt.get("biz_high") else "（低置信→升级 LLM）"))
 
-    cases = res.get("cases", [])
-    if cases:
-        L.append("【ML 相似案例召回】")
-        for c in cases:
-            L.append("  · %.3f | %s 次 | 最近 %s | 码 %s"
-                     % (c["similarity"], c["count"], c["last_date"],
-                        "/".join(c["errcodes"]) or "-"))
-            L.append("           %s" % c["skeleton"][:80])
+    rule_res = res.get("rule_res")
+    if rule_res and rule_res.get("class") in ("noise", "ora"):
+        L.append("-" * W)
+        L.append("【规则分流】判定=%s" % rule_res.get("class"))
+        L.append("    %s" % rule_res.get("verdict"))
 
-    ev = _fmt_evidence(res.get("rule_res"))
+    ev = _fmt_evidence(rule_res)
     if ev:
         L.append("【只读 SQL 查库证据（规则引擎）】")
         L += ev
@@ -79,7 +69,7 @@ def render_rule(res):
     """规则引擎 Engine.diagnose() 结果 -> 纯规则文本报告。"""
     L = []
     L.append("=" * 92)
-    L.append("【TLOG 业务报错诊断报告】")
+    L.append("【业务报错智能诊断报告】")
     L.append("=" * 92)
 
     loc = res.get("loc") or {}

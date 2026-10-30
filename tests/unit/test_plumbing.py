@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""路径解析、配置环境覆盖、证据格式化、空召回降级、CLI 出口码、报告渲染冒烟。"""
+"""路径解析、配置环境覆盖、证据格式化、CLI 出口码、报告渲染冒烟。"""
 import pytest
 
 from ai_ops import evidence, paths, reporting
@@ -9,13 +9,12 @@ from ai_ops import evidence, paths, reporting
 
 def test_paths_layout():
     assert paths.REPO_ROOT is not None
-    assert str(paths.dataset_csv()).replace("\\", "/").endswith("var/data/ml/dataset.csv")
     assert str(paths.config_file("db")).replace("\\", "/").endswith("config/db.yaml")
 
 
 def test_paths_env_override(tmp_path, monkeypatch):
-    monkeypatch.setenv("AIOPS_MODELS_DIR", str(tmp_path / "m"))
-    assert str(paths.models_dir()) == str(tmp_path / "m")
+    monkeypatch.setenv("AIOPS_REPORTS_DIR", str(tmp_path / "r"))
+    assert str(paths.reports_dir()) == str(tmp_path / "r")
 
 
 # ---------- config ----------
@@ -64,13 +63,22 @@ def test_evidence_card_formatters():
     assert evidence.to_report_lines({})[0].endswith("知识库未命中相关诊断材料）")
 
 
-# ---------- retriever 空降级 ----------
+# ---------- 报告渲染冒烟 ----------
 
-def test_retriever_degrades_without_dataset(tmp_path):
-    from ai_ops.ml.retriever import SimilarCaseIndex
-    idx = SimilarCaseIndex.from_dataset(path=str(tmp_path / "missing.csv"))
-    assert idx.records == [] and idx.query("任意文本") == []
+def test_render_rule_noise():
+    out = reporting.render_rule(
+        {"class": "noise", "text": "处理成功！", "verdict": "非故障提示，无需诊断"})
+    assert "业务报错智能诊断报告" in out and "非故障提示" in out
 
+
+def test_render_hybrid_rule_fast():
+    res = {"text": "x", "errcode": 0, "ldate": "", "loc": "",
+           "rule_res": {"class": "noise", "verdict": "非故障提示，无需诊断"},
+           "kb_card": None,
+           "answer": {"root": "无需诊断", "actions": [], "confidence": 1.0},
+           "source": "规则快速路径（噪音/技术错误，零 token）"}
+    out = reporting.render_hybrid(res)
+    assert "规则分流" in out and "非故障提示" in out
 
 # ---------- CLI 出口码 ----------
 
@@ -79,21 +87,3 @@ def test_cli_no_args_exit_2(monkeypatch):
     with pytest.raises(SystemExit) as ei:
         cli.main([])
     assert ei.value.code == 2
-
-
-# ---------- 报告渲染冒烟 ----------
-
-def test_render_rule_noise():
-    out = reporting.render_rule(
-        {"class": "noise", "text": "处理成功！", "verdict": "非故障提示，无需诊断"})
-    assert "TLOG 业务报错诊断报告" in out and "非故障提示" in out
-
-
-def test_render_hybrid_minimal():
-    res = {"text": "x", "errcode": 0, "ldate": "", "loc": "",
-           "rt": {"route": "noise", "confidence": 1.0},
-           "cases": [], "rule_res": None, "kb_card": None,
-           "answer": {"root": "无需诊断", "actions": [], "confidence": 1.0},
-           "source": "ML 快速路径"}
-    out = reporting.render_hybrid(res)
-    assert "ML 分流" in out and "ML 快速路径" in out

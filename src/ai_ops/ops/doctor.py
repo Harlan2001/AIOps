@@ -9,12 +9,10 @@ import sys
 
 from ai_ops import paths, rules_store
 
-_PKGS = [("yaml", "PyYAML"), ("py_opengauss", "py-opengauss"), ("sklearn", "scikit-learn"),
-         ("joblib", "joblib"), ("numpy", "numpy"), ("scipy", "scipy")]
+_PKGS = [("yaml", "PyYAML"), ("py_opengauss", "py-opengauss"), ("numpy", "numpy")]
 
 _MODULES = ["ai_ops.cli", "ai_ops.pipeline", "ai_ops.reporting",
             "ai_ops.engine.parser", "ai_ops.engine.rule_engine",
-            "ai_ops.ml.router", "ai_ops.ml.retriever",
             "ai_ops.llm.client", "ai_ops.kb.client"]
 
 
@@ -33,15 +31,12 @@ def main():
             print("  [缺失] %-14s (%s)" % (dist, e.__class__.__name__))
             missing.append(dist)
 
-    print("\n[2] 配置 / 模型 / 数据 / 规则资产")
+    print("\n[2] 配置 / 规则资产")
     cfg_dir = paths.config_dir()
     assets = [
         ("config/db.yaml.example 模板", cfg_dir / "db.yaml.example"),
         ("config/db.yaml（真实值，不入库）", paths.config_file("db")),
         ("config/llm.yaml（未配置则离线降级）", paths.config_file("llm")),
-        ("routing.joblib", paths.models_dir() / "routing.joblib"),
-        ("biz_type.joblib", paths.models_dir() / "biz_type.joblib"),
-        ("ML 数据集 dataset.csv", paths.dataset_csv()),
     ]
     for label, path in assets:
         print("  %s  %s (%s)" % ("[OK]  " if path.exists() else "[缺失]", label, path))
