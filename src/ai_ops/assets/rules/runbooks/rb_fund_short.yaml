@@ -1,0 +1,38 @@
+# 诊断树：策略资金不足（GaussDB 新增，真实报错，ftr_err 高频 48,877 条）
+# 报错形如：策略资金不足。 / 客户交易可用资金不足
+# 业务含义：策略发起委托时，账户可用资金无法覆盖该委托所需保证金/货款。
+# 数据现状：信创测试库资金总账表 tc_real_money/tc_origin_money/tc_clear_money 当前为空，
+#           仅成交盈亏明细表 tc_trader_cash_detail_clear 有历史数据；
+#           账户余额需在生产/更完整环境核对（本 runbook 已诚实标注，不编造金额）。
+id: rb_fund_short
+title: 策略资金不足
+steps:
+  - id: is_trade_date
+    type: sql_check
+    title: 交易日检查
+    expect: {exists: true}
+    sql: "SELECT trade_date, note FROM dimple.tp_exch_trade_date WHERE trade_date = :trade_date"
+    on_fail:
+      root: "当日（{trade_date}）不在交易日历，或交易日历/节假日尚未配置"
+      action:
+        - "检查交易日历与节假日是否已维护到该日期"
+
+  - id: trader_cash_detail
+    type: sql_query
+    title: 交易员当日成交/盈亏明细（看当天交易与盈亏）
+    sql: "SELECT trade_date, match_no, bs_flag, contract_id, price, qty, clear_price, profit FROM dimple.tc_trader_cash_detail_clear WHERE clear_date = :trade_date AND member_id = :member AND client_id = :client AND trader_no = :trader ORDER BY trade_date, match_no LIMIT 20"
+
+  - id: account_money
+    type: sql_query
+    title: 账户实有资金（设计上的资金总账；测试库当前为空，需在生产环境核对）
+    # 注意：tc_real_money.invest_id 为投资者号(varchar(14))，:client 来自报错文本的客户号，
+    #       两者映射关系需业务确认；若不一致此查询将返回空，仅作旁证不参与判定。
+    sql: "SELECT invest_id, last_remain, used_money, using_money, out_money FROM dimple.tc_real_money WHERE invest_id = :client"
+
+default:
+  root: "策略资金不足：客户 {client}（交易员 {trader}）在 {contract} 的可用资金无法覆盖本次委托（{qty} 手）所需保证金/货款。常见原因：资金未到位、上日亏损未补、出入金未完成，或可用资金被其他委托占用/冻结"
+  action:
+    - "在【资金管理】核对该客户可用资金/可出资金，确认出入金是否已到账"
+    - "按合约保证金率计算本次委托所需保证金/货款，与可用资金对比"
+    - "检查是否有未成交委托占用或冻结资金，必要时撤单释放"
+    - "补入资金，或减少委托数量后重试"

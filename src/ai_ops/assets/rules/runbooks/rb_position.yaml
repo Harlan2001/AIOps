@@ -1,4 +1,5 @@
-# 诊断树：平仓时持仓不足
+# 诊断树：平仓时持仓不足（GaussDB 版）
+# 表已从 Oracle CLEAR. 迁移为 dimple. 小写表名（tc_ftr_client_posi_clear / tc_clear_posi_detail）。
 id: rb_position
 title: 平仓时持仓不足
 
@@ -12,14 +13,14 @@ steps:
   - id: posi_latest
     type: sql_query
     title: 客户持仓表最新结算日（旁证）
-    sql: "SELECT MAX(CLEAR_DATE) AS LATEST_DATE FROM CLEAR.TC_FTR_CLIENT_POSI_CLEAR"
+    sql: "SELECT MAX(clear_date) AS latest_date FROM dimple.tc_ftr_client_posi_clear"
 
   - id: client_posi
     type: sql_check
     title: 客户该合约当日持仓
     primary: true
     expect: {exists: true}
-    sql: "SELECT CLEAR_DATE, CLIENT_ID, MEMBER_ID, CONTRACT_ID, SH_FLAG, BUY_QTY, SELL_QTY FROM CLEAR.TC_FTR_CLIENT_POSI_CLEAR WHERE CLEAR_DATE=:trade_date AND MEMBER_ID=:member AND CLIENT_ID=:client AND CONTRACT_ID=:contract"
+    sql: "SELECT clear_date, client_id, member_id, contract_id, sh_flag, buy_qty, sell_qty FROM dimple.tc_ftr_client_posi_clear WHERE clear_date=:trade_date AND member_id=:member AND client_id=:client AND contract_id=:contract"
     on_fail:
       root: "客户持仓表无该会员/客户/合约的当日持仓记录（持仓未初始化或已全部平掉）"
       action:
@@ -29,7 +30,7 @@ steps:
   - id: detail_posi
     type: sql_query
     title: 持仓明细（按席位/交易员/买卖方向）
-    sql: "SELECT TRADE_DATE, MEMBER_ID, CLIENT_ID, TRADER_NO, BS_FLAG, SUM(QTY) AS QTY FROM CLEAR.TC_CLEAR_POSI_DETAIL WHERE TRADE_DATE=:trade_date AND MEMBER_ID=:member AND CLIENT_ID=:client AND CONTRACT_ID=:contract GROUP BY TRADE_DATE, MEMBER_ID, CLIENT_ID, TRADER_NO, BS_FLAG ORDER BY TRADER_NO, BS_FLAG"
+    sql: "SELECT trade_date, member_id, client_id, trader_no, bs_flag, SUM(qty) AS qty FROM dimple.tc_clear_posi_detail WHERE trade_date=:trade_date AND member_id=:member AND client_id=:client AND contract_id=:contract GROUP BY trade_date, member_id, client_id, trader_no, bs_flag ORDER BY trader_no, bs_flag"
 
 default:
   root: "{bs_dir}方向持仓不足：{contract} 平仓量超过可平量，报错尚缺 {lack} 手（会员 {member} / 客户 {client} / 交易员 {trader} / 成交 {match_no}）"

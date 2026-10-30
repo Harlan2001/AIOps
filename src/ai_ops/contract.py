@@ -41,17 +41,14 @@ class DiagnosisResult(TypedDict, total=False):
     errcode: int
     ldate: str
     loc: str
-    rt: dict                          # ML 分流器原始输出
-    cases: List[dict]                 # ML 相似案例召回
     rule_res: Optional[dict]          # 规则引擎只读查库结果（含 Evidence 列表）
     kb_card: Optional[dict]           # Dimple 知识卡（机制证据）
     answer: Optional[Answer]
     source: str                       # 结论来源标注（可解释、可审计）
 
 
-# 来源标注（报告逐步标注由 ML/知识库/规则/LLM 完成）
-SOURCE_ML_FAST = "ML 快速路径"
-SOURCE_RULE_FAST = "规则快速路径（ML 高置信 + 只读查库，零 token）"
-SOURCE_LLM = "LLM 诊断大脑（ML 分流/召回 + 规则取证）"
+# 来源标注（报告逐步标注由规则/知识库/LLM 完成）
+SOURCE_RULE_FAST = "规则快速路径（规则查库取证，零 token）"
+SOURCE_LLM = "LLM 诊断大脑（规则识别 + KB 知识卡 + 规则取证）"
 SOURCE_RULE_FALLBACK = "规则兜底（LLM 未配置/不可用，已按规则查库）"
 SOURCE_GENERIC_FALLBACK = "兜底（LLM 未配置 + 规则未覆盖）"

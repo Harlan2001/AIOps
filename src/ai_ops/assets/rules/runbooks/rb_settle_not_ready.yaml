@@ -1,0 +1,44 @@
+# 诊断树：结算状态未就绪（flow_control）
+# 报错形如：系统状态非结算完成 / 不能做盘后对账 / 结算状态未就绪 / 前置步骤未完成
+# 业务含义：当前结算步骤的前置条件不满足（如上一步未完成、系统状态未切换到结算态、
+#           或交易所未发布结算数据），当前步骤不能执行。
+# 数据现状：tc_flow_control 为判断控制配置表（无 clear_date），执行记录查历史表
+#           tc_his_flow_control（含 clear_date/oper_flag/oper_result）。
+id: rb_settle_not_ready
+title: 结算状态未就绪
+steps:
+  - id: flow_status
+    type: sql_check
+    title: 结算流程状态检查
+    primary: true
+    expect: {exists: true}
+    sql: "SELECT clear_date, flow_code, exch_code, oper_name, oper_flag, oper_result, oper_time, err_msg FROM dimple.tc_his_flow_control WHERE clear_date = :trade_date AND flow_code = :flow_code AND exch_code = :exch ORDER BY oper_time DESC"
+    on_fail:
+      root: "未找到结算流程记录：结算日期 {trade_date} 交易所 {exch} 流程码 {flow_code} 无执行记录（结算流程未启动或流程码配置错误）"
+      action:
+        - "在【结算流程管理】中确认当日结算流程是否已启动"
+        - "检查流程配置中 flow_code 是否正确，是否有遗漏的结算步骤"
+
+  - id: prev_steps
+    type: sql_query
+    title: 前置步骤执行情况（旁证，看哪些步骤已完成/失败/未执行）
+    sql: "SELECT clear_date, flow_code, exch_code, oper_name, oper_flag, oper_result, oper_time, err_msg FROM dimple.tc_his_flow_control WHERE clear_date = :trade_date AND exch_code = :exch ORDER BY flow_code, oper_time"
+
+  - id: trade_cal
+    type: sql_check
+    title: 交易日检查
+    expect: {exists: true}
+    sql: "SELECT trade_date, note FROM dimple.tp_exch_trade_date WHERE trade_date = :trade_date"
+    on_fail:
+      root: "当日（{trade_date}）不在交易日历，结算不应执行"
+      action:
+        - "检查交易日历配置，确认当日是否应为结算日"
+
+default:
+  root: "结算状态未就绪：结算日期 {trade_date} 交易所 {exch} 当前步骤 {flow_code} 的前置条件未满足。可能原因：上一步结算未完成/失败、交易所结算数据未发布、系统结算开关未打开、或存在未处理的对账差异"
+  action:
+    - "检查前置步骤的执行状态：如上一步失败，先解决上一步的报错后重试"
+    - "检查交易所是否已发布当日结算数据（结算价、行情、成交等）"
+    - "确认系统结算开关（settlement flag）是否已置为'可结算'状态"
+    - "如前置步骤全部成功但仍报未就绪，检查结算状态机的状态流转逻辑是否正确"
+    - "待前置条件全部满足后，重新触发当前结算步骤"

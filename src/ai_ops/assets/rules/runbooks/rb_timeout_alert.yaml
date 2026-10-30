@@ -1,0 +1,32 @@
+# 诊断树：成交/报价超时报警（quote_alarm 约 25 万条）
+# 报错形如：成交超时 / 单边报价超时 / 单边成交超时 / 报价应答超时
+# 业务含义：做市商报价或成交在交易所规定的时间内未得到应答/确认，触发超时报警。
+# 这通常不是数据库层面的问题，而是网络延迟、交易所系统响应慢、或做市系统处理能力不足。
+id: rb_timeout_alert
+title: 成交/报价超时报警
+steps:
+  - id: timeout_cfg
+    type: sql_check
+    title: 超时阈值配置检查
+    expect: {exists: true}
+    # 原 tc_quote_timeout_config 不存在，改查报价风控参数表 tc_quote_risk_config
+    # （duration_limit=时长秒，numbers_limit=次数，risk_type 为风控指标类型字典409）
+    sql: "SELECT member_id, contract_id, risk_type, numbers_limit, duration_limit, if_valid FROM dimple.tc_quote_risk_config WHERE member_id = :member AND contract_id = :contract"
+    on_fail:
+      root: "未配置风控参数：会员 {member} 合约 {contract} 在报价风控参数表无记录（系统使用全局默认超时阈值）"
+      action:
+        - "在【报价超时配置】中为该会员/合约设置合理的超时阈值（考虑网络延迟 + 交易所处理时间）"
+
+  - id: recent_timeout
+    type: sql_query
+    title: 近期超时记录（旁证，看超时频率和趋势）
+    sql: "SELECT trade_date, member_id, contract_id, risk_type, risk_info, risk_time FROM dimple.tc_his_quote_alarm_note WHERE member_id = :member AND contract_id = :contract AND risk_type LIKE '%超时%' ORDER BY trade_date DESC, risk_time DESC LIMIT 10"
+
+default:
+  root: "成交/报价超时报警：会员 {member} 合约 {contract} 的报价或成交在超时阈值内未收到交易所应答。常见原因：网络延迟、交易所系统繁忙、做市系统处理能力瓶颈、或超时阈值设置过紧"
+  action:
+    - "检查做市系统到交易所前置机的网络延迟（ping/专线监控），排除网络抖动"
+    - "检查交易所是否发布了系统延迟或技术故障公告"
+    - "检查做市系统 CPU/内存/线程池是否饱和，确认处理能力充足"
+    - "如为偶发性超时（市场剧烈波动时交易所响应变慢），可适当放宽超时阈值"
+    - "如为持续性超时，需排查做市策略逻辑是否存在死循环或慢查询阻塞"

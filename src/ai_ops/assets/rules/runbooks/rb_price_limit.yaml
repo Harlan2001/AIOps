@@ -1,0 +1,45 @@
+# 诊断树：价格超出涨停板（GaussDB 新增，ftr_err 2,585 条）
+# 报错形如：价格超出涨停板 / 委托价格超出涨跌停范围 / 报价超出上限
+# 业务含义：委托价格高于当日涨停价或低于跌停价，被系统拒绝。
+# 数据现状：tc_clear_price 仅含 last_clear_price/clear_price，无涨跌停价列；
+#           tt_ftr_contract 含涨跌停板率（rise_limit/fall_limit）但非价格。
+#           涨跌停价无对应表，判定以行情/交易所公告为准，本 runbook 只核验结算价是否生成。
+id: rb_price_limit
+title: 价格超出涨停板
+extra_params:
+  order_price: {regex: '价格[=:：]?\s*([0-9]+\.?[0-9]*)'}
+steps:
+  - id: is_trade_date
+    type: sql_check
+    title: 交易日检查
+    expect: {exists: true}
+    sql: "SELECT trade_date, note FROM dimple.tp_exch_trade_date WHERE trade_date = :trade_date"
+    on_fail:
+      root: "当日（{trade_date}）不在交易日历，或交易日历/节假日尚未配置"
+      action:
+        - "检查交易日历与节假日是否已维护到该日期"
+
+  - id: price_limits
+    type: sql_check
+    title: 当日结算价/昨结价检查
+    primary: true
+    expect: {exists: true}
+    sql: "SELECT trade_date, contract_id, last_clear_price, clear_price FROM dimple.tc_clear_price WHERE trade_date = :trade_date AND contract_id = :contract"
+    on_fail:
+      root: "{contract} 在 {trade_date} 的结算价尚未生成（闭市后处理未执行/失败，或当日行情缺失）"
+      action:
+        - "在【结算价管理】中确认该合约当日结算价是否已生成"
+        - "检查闭市后结算/行情导入任务是否成功执行"
+        - "补录结算价或重跑结算后重新提交委托"
+
+  - id: recent_price
+    type: sql_query
+    title: 近期结算价（旁证，看价格波动趋势）
+    sql: "SELECT trade_date, contract_id, clear_price, last_clear_price FROM dimple.tc_clear_price WHERE contract_id = :contract ORDER BY trade_date DESC LIMIT 5"
+
+default:
+  root: "委托价格超出涨停板：{contract} 当日结算价/昨结价已存在，委托价 {order_price} 超出交易所允许的涨跌停范围（涨跌停价请以行情/交易所公告为准），属于录入价格错误或行情剧烈波动"
+  action:
+    - "核对委托价格是否录入正确（是否为市价单误填为限价单、小数位错误）"
+    - "查看该合约当日涨跌停价与最新行情，确认是否触及涨跌停"
+    - "调整委托价格为允许范围内的限价，或改用市价单"

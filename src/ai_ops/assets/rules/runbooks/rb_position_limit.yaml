@@ -1,0 +1,49 @@
+# 诊断树：超出会员限仓（GaussDB 新增，ftr_err 高频 15,500 条）
+# 报错形如：会员[016811]超出限仓 / 会员持仓超出限额 / 超出交易所限仓
+# 业务含义：会员在某合约/品种上的持仓量超过了交易所或风控配置的限仓额度。
+# 数据现状：限仓配置表 tc_amout_limit_config（清单确认表名为 amout，非 amount）。
+id: rb_position_limit
+title: 超出会员限仓
+steps:
+  - id: is_trade_date
+    type: sql_check
+    title: 交易日检查
+    expect: {exists: true}
+    sql: "SELECT trade_date, note FROM dimple.tp_exch_trade_date WHERE trade_date = :trade_date"
+    on_fail:
+      root: "当日（{trade_date}）不在交易日历，或交易日历/节假日尚未配置"
+      action:
+        - "检查交易日历与节假日是否已维护到该日期"
+
+  - id: limit_config
+    type: sql_check
+    title: 会员限仓配置检查
+    primary: true
+    expect: {exists: true}
+    # 表名为 tc_amout_limit_config（清单确认，非 amount）；config_type 为参数类型(字典334)，
+    # 限仓对应取值需确认；alarm_value=预警阀值 / limit_value=极限值
+    sql: "SELECT member_id, contract_id, config_type, alarm_value, limit_value, if_over FROM dimple.tc_amout_limit_config WHERE member_id = :member AND contract_id = :contract"
+    on_fail:
+      root: "会员 {member} 在 {contract} 上未配置限仓额度，或配置表无记录（系统默认拒绝所有开仓直到显式配置）"
+      action:
+        - "在【会员限仓配置】中为该会员/合约/品种配置多空/净持仓限额并启用检查"
+        - "确认配置的限额是否与交易所规定一致"
+        - "配置完成后复核，再重新提交委托"
+
+  - id: member_posi
+    type: sql_query
+    title: 会员当前持仓（旁证，看是否已接近或超过限额）
+    sql: "SELECT clear_date, member_id, contract_id, buy_qty, sell_qty FROM dimple.tc_member_posi WHERE clear_date = :trade_date AND member_id = :member AND contract_id = :contract"
+
+  - id: exch_posi
+    type: sql_query
+    title: 交易所持仓（旁证，看全市场该合约的持仓水位）
+    sql: "SELECT clear_date, contract_id, sh_flag, buy_qty, sell_qty FROM dimple.tc_exch_posi WHERE clear_date = :trade_date AND contract_id = :contract"
+
+default:
+  root: "会员 {member} 在 {contract} 上的持仓已达限仓额度，本次委托 {qty} 手将超出限额（配置额度可能低于当前持仓+委托量）"
+  action:
+    - "对照限仓配置表核对该会员/合约的多空限额与实际持仓量"
+    - "如需放行，在【会员限仓配置】中调整对应限额（需风控审批）"
+    - "或减少本次委托数量，使总持仓不超限额"
+    - "检查是否有未成交委托占用了限仓额度，撤单可释放"
