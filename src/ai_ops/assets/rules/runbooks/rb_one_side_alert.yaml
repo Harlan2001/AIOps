@@ -1,0 +1,32 @@
+# 诊断树：持续单边提示报警（quote_alarm 约 7 千条）
+# 报错形如：持续单边成交 / 持续单边报价 / 持续单边行情
+# 业务含义：某合约连续多笔成交或报价均为同一方向（全买或全卖），
+#           可能意味着做市商策略偏差、市场单边行情、或系统报价逻辑异常。
+id: rb_one_side_alert
+title: 持续单边提示报警
+steps:
+  - id: one_side_check
+    type: sql_query
+    title: 近期成交方向分布（旁证，看买卖比例是否严重失衡）
+    sql: "SELECT bs_flag, COUNT(*) AS cnt FROM dimple.tt_his_ftr_err_order WHERE trade_date = :trade_date AND member_id = :member AND contract_id = :contract GROUP BY bs_flag"
+
+  - id: quote_direction
+    type: sql_query
+    title: 近期报价方向分布（旁证，看报价买卖比例）
+    sql: "SELECT bs_flag, COUNT(*) AS cnt FROM dimple.tt_his_quote_err_order WHERE trade_date = :trade_date AND member_id = :member AND contract_id = :contract GROUP BY bs_flag"
+
+  - id: one_side_threshold
+    type: sql_query
+    title: 报价风控参数（旁证，看单边相关阈值）
+    # 原 tc_one_side_config 在 GaussDB 清单中不存在，改查报价风控参数表 tc_quote_risk_config；
+    # risk_type(字典409) 中单边指标的对应取值需业务确认
+    sql: "SELECT member_id, contract_id, risk_type, numbers_limit, duration_limit, if_valid FROM dimple.tc_quote_risk_config WHERE member_id = :member AND contract_id = :contract"
+
+default:
+  root: "持续单边提示：会员 {member} 合约 {contract} 连续多笔成交/报价为同一方向，超过单边报警阈值。可能原因：市场单边行情（普涨/普跌）、做市策略参数偏差、或对冲逻辑未正常触发"
+  action:
+    - "查看该合约当日行情走势，确认是否为市场整体单边行情（属正常现象，可忽略）"
+    - "检查做市策略的买卖价差参数是否偏离市场，导致只有单边报价成交"
+    - "检查对冲模块是否正常运行（单边累积头寸后应触发反向对冲）"
+    - "如为策略参数问题，调整报价偏移量或对冲触发阈值"
+    - "如为系统异常（报价逻辑只发单边），排查策略代码逻辑"

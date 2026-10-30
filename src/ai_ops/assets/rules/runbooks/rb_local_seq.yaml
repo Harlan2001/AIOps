@@ -1,0 +1,38 @@
+# 诊断树：本地报单号没递增（GaussDB 新增，ftr_err 1,236 条）
+# 报错形如：本地报单号没递增 / local_no 不递增 / 报单序号异常
+# 业务含义：交易所委托要求 local_no 递增（同一交易员同日的委托序号必须递增），
+#           如果出现乱序（如并发提交、重发、系统重启后序号回退），交易所会拒绝。
+# 注：此报错通常是应用层/网关层的序号管理问题，数据库侧只能旁证历史序号。
+#     序号水位查主委托表 tt_ftr_order（错误委托表不含全部委托，不能代表全局水位）。
+id: rb_local_seq
+title: 本地报单号没递增
+steps:
+  - id: is_trade_date
+    type: sql_check
+    title: 交易日检查
+    expect: {exists: true}
+    sql: "SELECT trade_date, note FROM dimple.tp_exch_trade_date WHERE trade_date = :trade_date"
+    on_fail:
+      root: "当日（{trade_date}）不在交易日历，或交易日历/节假日尚未配置"
+      action:
+        - "检查交易日历与节假日是否已维护到该日期"
+
+  - id: recent_local_no
+    type: sql_query
+    title: 同交易员当日已用报单号（旁证，看当前序号水位）
+    # 主委托表 tt_ftr_order（错误委托表 tt_ftr_err_order 只含失败委托，不能代表序号水位）
+    sql: "SELECT trade_date, trader_no, local_no, contract_id, bs_flag, eo_flag, qty, status FROM dimple.tt_ftr_order WHERE trade_date = :trade_date AND trader_no = :trader ORDER BY local_no DESC LIMIT 10"
+
+  - id: max_local_no
+    type: sql_query
+    title: 同交易员当日最大报单号（判断是否序号回退）
+    # local_no 为 varchar(20)，CAST 依赖纯数字格式，若含分隔符需改为字符串排序比较
+    sql: "SELECT MAX(CAST(local_no AS BIGINT)) AS max_local_no FROM dimple.tt_ftr_order WHERE trade_date = :trade_date AND trader_no = :trader"
+
+default:
+  root: "交易员 {trader} 的本地报单号未递增：报盘网关要求同一交易员当日的委托序号（local_no）严格递增，当前委托序号小于或等于已发送的最大序号（序号回退或重复），交易所拒绝接收"
+  action:
+    - "检查报盘网关/API 的序号缓存是否因重启而丢失，需从数据库恢复最新序号"
+    - "确认是否有并发线程/进程共用同一交易员号发单，导致乱序——需加锁或分交易员号"
+    - "在报盘网关侧重置序号计数器为当前最大序号 + 1，然后重新提交"
+    - "长期方案：序号管理做成原子递增（Redis/数据库序列），避免应用层计数器不可靠"

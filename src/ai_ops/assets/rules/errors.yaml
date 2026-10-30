@@ -19,6 +19,7 @@ types:
     keywords: ["递延费率不存在"]
     err_codes: [101022001, 101020101, 101022015, 101020206]
     param_alias:
+      "会员": "member"
       "合约": "contract"
     runbook: rb_defer_fee
 
@@ -35,3 +36,188 @@ types:
       "合约": "contract"
       "尚缺": "lack"
     runbook: rb_position
+
+  - id: close_posi_not_enough
+    title: 平仓数量不够
+    severity: error
+    keywords: ["平仓数量不够", "历史仓数量不够", "平仓数量"]
+    err_codes: []
+    param_alias:
+      "会员": "member"
+      "客户": "client"
+      "交易员": "trader"
+      "合约": "contract"
+    runbook: rb_close_posi
+
+  - id: exposure_not_enough
+    title: 敞口不够
+    severity: error
+    keywords: ["敞口不够"]
+    err_codes: []
+    param_alias:
+      "会员": "member"
+      "交易员": "trader"
+      "品种": "variety"
+      "市场": "market"
+      "交易目的": "purpose"
+    runbook: rb_exposure
+
+  - id: strategy_fund_short
+    title: 策略资金不足
+    severity: error
+    keywords: ["策略资金不足", "客户交易可用资金不足"]
+    err_codes: []
+    param_alias:
+      "会员": "member"
+      "客户": "client"
+      "交易员": "trader"
+      "合约": "contract"
+    runbook: rb_fund_short
+
+  - id: position_limit
+    title: 超出会员限仓
+    severity: error
+    keywords: ["超出会员限仓", "超出限仓", "会员限仓", "持仓超出限额", "超出交易所限仓", "超出持仓限额"]
+    err_codes: []
+    param_alias:
+      "会员": "member"
+      "合约": "contract"
+    runbook: rb_position_limit
+
+  - id: price_limit
+    title: 价格超出涨停板
+    severity: error
+    keywords: ["价格超出涨停板", "超出涨停价", "超出跌停价", "价格超出上限", "价格超出下限", "涨跌停"]
+    err_codes: []
+    param_alias:
+      "会员": "member"
+      "合约": "contract"
+    runbook: rb_price_limit
+
+  - id: self_trade
+    title: 自成交风险
+    severity: error
+    keywords: ["自成交", "自成交风险", "自成交禁止", "同账户反向"]
+    err_codes: []
+    param_alias:
+      "会员": "member"
+      "客户": "client"
+      "交易员": "trader"
+      "合约": "contract"
+    runbook: rb_self_trade
+
+  - id: local_seq
+    title: 本地报单号没递增
+    severity: error
+    keywords: ["本地报单号没递增", "报单号不递增", "local_no", "报单序号", "序号不递增"]
+    err_codes: []
+    param_alias:
+      "交易员": "trader"
+    runbook: rb_local_seq
+
+  - id: market_closed
+    title: 闭市/交易暂停/报盘机未连
+    severity: error
+    keywords: ["闭市", "连续交易暂停", "非交易时间", "报盘机未连", "API未连", "前置机不可用", "交易暂停", "休市", "报盘机未连接"]
+    err_codes: []
+    param_alias:
+      "会员": "member"
+      "交易所": "exch"
+    runbook: rb_market_closed
+
+  - id: contract_state_error
+    title: 合约状态错误
+    severity: error
+    keywords: ["合约状态错误", "合约未上市", "合约已退市", "合约暂停交易", "合约不存在", "合约状态异常", "合约不可交易"]
+    err_codes: []
+    param_alias:
+      "合约": "contract"
+      "品种": "variety"
+    runbook: rb_contract_state
+
+  # ---- 报警通用模板（alarm / quote_alarm / rule_alarm）----
+  # 注：报警类文本常不含 ERROR_KW 中的"失败/异常/错误"等词，可能被 classify 归为 other。
+  # 若报警被归为 other 则不会进入 runbook 匹配；需同步调整 parser.ERROR_KW 或引擎分类逻辑。
+
+  - id: pl_alert
+    title: 盈亏限额报警
+    severity: warn
+    keywords: ["盈亏超限", "累计盈亏", "盈亏限额", "亏损超限", "盈利超限"]
+    err_codes: []
+    param_alias:
+      "会员": "member"
+      "交易目的": "purpose"
+    runbook: rb_pl_alert
+
+  - id: net_position_alert
+    title: 净头寸/待平盘超额报警
+    severity: warn
+    keywords: ["净头寸超额", "待平盘量超额", "美元净头寸", "贵金属净头寸", "净头寸"]
+    err_codes: []
+    param_alias:
+      "会员": "member"
+      "合约": "contract"
+    runbook: rb_net_position_alert
+
+  - id: timeout_alert
+    title: 成交/报价超时报警
+    severity: warn
+    keywords: ["成交超时", "单边报价超时", "单边成交超时", "报价超时", "应答超时"]
+    err_codes: []
+    param_alias:
+      "会员": "member"
+      "合约": "contract"
+    runbook: rb_timeout_alert
+
+  - id: one_side_alert
+    title: 持续单边提示报警
+    severity: warn
+    keywords: ["持续单边成交", "持续单边报价", "持续单边", "单边行情"]
+    err_codes: []
+    param_alias:
+      "会员": "member"
+      "合约": "contract"
+    runbook: rb_one_side_alert
+
+  - id: swap_exposure_alert
+    title: 掉期远端敞口报警
+    severity: warn
+    keywords: ["远端敞口", "空头净敞口", "实时库存", "PAu", "iPAu", "掉期敞口"]
+    err_codes: []
+    param_alias:
+      "会员": "member"
+      "品种": "variety"
+      "合约": "contract"
+    runbook: rb_swap_exposure_alert
+
+  - id: self_trade_alert
+    title: 自成交次数预警
+    severity: warn
+    keywords: ["自成交次数", "预警阀值", "自成交预警", "自成交统计"]
+    err_codes: []
+    param_alias:
+      "会员": "member"
+      "客户": "client"
+    runbook: rb_self_trade_alert
+
+  # ---- 流程对账模板（flow_control）----
+
+  - id: margin_mismatch
+    title: 准备金/保证金对账不平
+    severity: error
+    keywords: ["准备金不平", "保证金不平", "对账不平", "初始准备金", "占用保证金"]
+    err_codes: []
+    param_alias:
+      "会员": "member"
+      "交易所": "exch"
+      "结算日期": "trade_date"
+    runbook: rb_margin_mismatch
+
+  - id: settle_not_ready
+    title: 结算状态未就绪
+    severity: error
+    keywords: ["结算状态", "非结算完成", "不能做盘后对账", "系统状态", "结算未完成", "前置未完成", "结算未就绪"]
+    err_codes: []
+    param_alias:
+      "交易所": "exch"
+    runbook: rb_settle_not_ready
