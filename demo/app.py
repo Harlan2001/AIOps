@@ -50,11 +50,23 @@ def render_one(rec, res):
             st.markdown("- **%s**：缺少参数 %s，跳过" % (ev.get("title"),
                         "、".join(r.get("missing", []))))
             continue
+        if r.get("status") == "error":
+            st.markdown("- **%s**：⚠ 取证失败（%s）" % (ev.get("title"),
+                        r.get("error", "")))
+            continue
         rows = r.get("rows", [])
         st.markdown("- **%s**：%d 行" % (ev.get("title"), len(rows)))
         if rows:
             st.dataframe(pd.DataFrame(rows, columns=r.get("cols")),
                          use_container_width=True, hide_index=True)
+
+    # 降级可见化（阶段 3·③）：SQL 取证失败显式警示，避免误把降级结论当完整诊断
+    sql_errs = res.get("sql_errors") or []
+    if sql_errs:
+        st.warning("**降级提示**：%d 条取证 SQL 未成功执行，本条结论可能基于不完整证据，请谨慎采信。"
+                   % len(sql_errs))
+        for e in sql_errs:
+            st.caption("step %s：%s" % (e.get("step"), e.get("error", "")))
 
     st.markdown("#### 问题是什么")
     st.write(res.get("root", ""))

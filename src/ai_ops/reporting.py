@@ -43,6 +43,13 @@ def render_hybrid(res):
         L.append("【只读 SQL 查库证据（规则引擎）】")
         L += ev
 
+    sql_errs = (rule_res or {}).get("sql_errors") or []
+    if sql_errs:
+        L.append("【降级提示】%d 条取证 SQL 未成功执行，本条结论可能基于不完整证据，请谨慎采信："
+                 % len(sql_errs))
+        for e in sql_errs:
+            L.append("  - step %s：%s" % (e.get("step"), e.get("error", "")))
+
     kb_card = res.get("kb_card")
     if kb_card:
         L.append("【领域知识卡（Dimple 知识库 · 机制/根因/处置）】")
@@ -105,12 +112,18 @@ def render_rule(res):
         if r["status"] == "missing_params":
             L.append("  - %s：缺少参数 %s，跳过" % (ev["title"], ",".join(r["missing"])))
             continue
+        if r["status"] == "error":
+            L.append("  - %s：取证失败（%s）" % (ev["title"], r.get("error", "")))
+            continue
         n = len(r["rows"])
         L.append("  - %s：%d 行" % (ev["title"], n))
         if r["rows"]:
             L.append("      列: %s" % " | ".join(r["cols"]))
             for row in r["rows"][:3]:
                 L.append("      %s" % " | ".join(str(x) for x in row))
+
+    for e in res.get("sql_errors", []):
+        L.append("  ⚠ 取证降级：step %s → %s" % (e.get("step"), e.get("error", "")))
 
     L.append("-" * 92)
     L.append("【问题是什么】")

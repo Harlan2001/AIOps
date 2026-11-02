@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """规则引擎（运行时零模型）：正则解析 -> 类型匹配 -> 参数化只读 SQL 诊断树 -> 结构化结论。"""
 import re
+import warnings
 from collections import defaultdict
 
 from ai_ops import rules_store
@@ -14,6 +15,30 @@ class Engine:
     def __init__(self):
         self.types, self.noise_kw = rules_store.load_registries()
         self._runbooks = {}
+        self._warmup()
+
+    def _warmup(self):
+        """加载期 fail-fast（阶段 3·②）：预热全部 runbook 并用 977 表清单校验每条 SQL；
+        清单缺失时降级 warning（wheel 交付不含 docs/），校验失败时启动即拦截。"""
+        from ai_ops.engine import schema_check as SC
+        if not SC.catalog_available():
+            warnings.warn(
+                "表结构清单缺失，跳过规则加载期 fail-fast 校验，运行时降级仍显式可见。")
+            return
+        errors = []
+        for t in self.types:
+            rb_name = t.get("runbook")
+            if not rb_name:
+                continue
+            rb = self._load_runbook(rb_name)  # 预热进 _runbooks 缓存
+            errors.extend(SC.validate_runbook(rb_name, rb))
+        if errors:
+            lines = ["规则加载期校验失败（%d 处 SQL 引用与 977 表清单不一致，拒绝启动）："
+                     % len(errors)]
+            lines += ["  - %s" % e["msg"] for e in errors[:50]]
+            if len(errors) > 50:
+                lines.append("  ... 其余 %d 处省略" % (len(errors) - 50))
+            raise RuntimeError("\n".join(lines))
 
     def _classify(self, text, errcode):
         """ora / other / biz 判定用解析器通用规则；噪音判定由 noise_rules.yaml 驱动。"""

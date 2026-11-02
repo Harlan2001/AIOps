@@ -16,10 +16,9 @@ import re
 import pytest
 import yaml
 
-from ai_ops import paths, rules_store
+from ai_ops import rules_store
 
 RULES = pathlib.Path(rules_store.__file__).parent / "assets" / "rules"
-CATALOG = paths.REPO_ROOT / "docs" / "error" / "GaussDB_dimple_全量表结构与字段含义清单.md"
 
 # ---------- 1) YAML 可加载 ----------
 
@@ -100,68 +99,73 @@ def test_no_oracle_sql(runbooks):
 
 
 # ---------- 5) SQL 表名/列名与 977 表清单一致 ----------
-
-def _load_catalog():
-    tables = {}
-    cur = None
-    for line in CATALOG.read_text(encoding="utf-8").splitlines():
-        m = re.match(r"^## \d+\. dimple\.(\w+)\s*\(\d+ 字段\)$", line.strip())
-        if m:
-            cur = m.group(1)
-            tables[cur] = set()
-            continue
-        if cur and line.strip().startswith("|") and not line.strip().startswith("|---"):
-            cells = [c.strip() for c in line.strip().strip("|").split("|")]
-            if len(cells) >= 2 and cells[0] and cells[0] != "字段名":
-                tables[cur].add(cells[0])
-    return tables
-
-
-def _sql_tables_and_cols(sql):
-    """提取 SQL 引用的表名与列名（宽松解析，供存在性校验）。"""
-    s = re.sub(r"'[^']*'", "''", sql)
-    tables = re.findall(r"from\s+dimple\.(\w+)", s, re.I)
-    cols = set()
-    m = re.search(r"select\s+(.+?)\s+from\s+dimple\.(\w+)", s, re.I)
-    if m:
-        for seg in m.group(1).split(","):
-            seg = re.sub(r"^(\w+)\(", "", seg.strip())
-            seg = re.split(r"\s+as\s+", seg, flags=re.I)[0].strip()
-            seg = re.sub(r"\(.*\)", "", seg).strip()
-            if re.match(r"^[A-Za-z_]\w*$", seg):
-                cols.add(seg)
-    for m2 in re.finditer(r"\b([a-z_]\w*)\s*(?:=|>=|<=|<>|!=|>|<)", s, re.I):
-        cols.add(m2.group(1))
-    return tables, cols
-
-
-_SQL_NON_COL = {
-    "count", "sum", "max", "min", "avg", "cast", "select", "from", "where",
-    "order", "by", "group", "limit", "desc", "asc", "as", "dimple",
-    "distinct", "like", "between", "in", "is", "null", "and", "or", "not",
-    "on", "join", "left", "right", "exists", "bigint", "case", "when",
-    "then", "else", "end",
-}
-
+# 解析逻辑与运行时 fail-fast 共用 schema_check（单点事实源）
 
 def test_sql_tables_columns_exist_in_catalog(runbooks):
-    tables = _load_catalog()
+    from ai_ops.engine import schema_check as SC
+    tables = SC.load_catalog()
     assert len(tables) > 900, f"清单解析异常，仅 {len(tables)} 张表"
     checked = 0
     for rb_id, (fn, rb) in runbooks.items():
         for s in rb["steps"]:
             sql = s.get("sql") or ""
-            tbls, cols = _sql_tables_and_cols(sql)
+            tbls, cols = SC.sql_tables_and_cols(sql)
             assert tbls, f"{fn} step {s['id']} 未引用 dimple. 表: {sql}"
             for t in tbls:
                 assert t in tables, f"{fn} step {s['id']} 引用清单外表 dimple.{t}"
                 for c in cols:
-                    if c in _SQL_NON_COL:
+                    if c in SC.SQL_NON_COL:
                         continue
                     assert c in tables[t], \
                         f"{fn} step {s['id']} 引用清单外列 {t}.{c}（SQL: {sql[:80]}）"
             checked += 1
     assert checked >= 50, f"核对 SQL 过少: {checked}"
+
+
+def test_schema_check_detects_bad_table_and_column():
+    """fail-fast 校验核心：坏表/坏列/无表 SQL 均应报错（与运行时同源）。"""
+    from ai_ops.engine import schema_check as SC
+    tables = {"tt_ftr_order": {"order_no", "status", "qty"}}
+    bad_table = {"id": "x", "steps": [
+        {"id": "s1", "type": "sql_check", "sql": "select status from dimple.tt_nonexist where order_no = :no"}]}
+    bad_col = {"id": "y", "steps": [
+        {"id": "s1", "type": "sql_check", "sql": "select ghost_col from dimple.tt_ftr_order where status = :s"}]}
+    no_table = {"id": "z", "steps": [
+        {"id": "s1", "type": "sql_check", "sql": "select 1"}]}
+    assert SC.validate_runbook("x", bad_table, tables), "坏表应报错"
+    assert SC.validate_runbook("y", bad_col, tables), "坏列应报错"
+    assert SC.validate_runbook("z", no_table, tables), "无表 SQL 应报错"
+    good = {"id": "g", "steps": [
+        {"id": "s1", "type": "sql_check",
+         "sql": "select status from dimple.tt_ftr_order where order_no = :no"}]}
+    assert SC.validate_runbook("g", good, tables) == [], "合法 SQL 不应报错"
+
+
+def test_engine_warmup_failfast():
+    """Engine 启动即校验：清单正常时实例化成功；校验失败时 RuntimeError。"""
+    from ai_ops.engine import schema_check as SC
+    from ai_ops.engine.rule_engine import Engine
+    if not SC.catalog_available():
+        pytest.skip("表结构清单缺失，跳过启动校验测试")
+    Engine()  # 真实清单 + 20 runbook 应通过（不抛错）
+
+    # 人为制造校验失败：替换校验函数返回错误 -> Engine 必须拒绝启动
+    orig = SC.validate_runbook
+    SC.validate_runbook = lambda rb_id, rb: [{"step": "s1", "msg": "人为注入：坏列"}]
+    try:
+        with pytest.raises(RuntimeError, match="规则加载期校验失败"):
+            Engine()
+    finally:
+        SC.validate_runbook = orig
+
+
+def test_engine_warmup_degrades_without_catalog(monkeypatch, tmp_path):
+    """清单缺失时（wheel 交付不含 docs/）Engine 降级启动，不阻断。"""
+    from ai_ops.engine import schema_check as SC
+    from ai_ops.engine.rule_engine import Engine
+    monkeypatch.setattr(SC, "CATALOG", tmp_path / "no_such_catalog.md")
+    with pytest.warns(UserWarning, match="表结构清单缺失"):
+        Engine()
 
 
 # ---------- 6) SQL 绑定参数有来源 ----------
