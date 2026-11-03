@@ -27,6 +27,14 @@ def _loc_str(loc):
     return loc.get("module_label", "")
 
 
+def _mk_telemetry(path, llm_called=False, fallback_reason=None, rule_hit=False,
+                  cls=None, type_id=None):
+    """诊断链观测（3.1 观测基线）：记录本条走了哪条路径、是否调 LLM、兜底原因。"""
+    return {"path": path, "llm_called": llm_called,
+            "fallback_reason": fallback_reason, "rule_hit": rule_hit,
+            "cls": cls, "type_id": type_id}
+
+
 def diagnose(rec, force_llm=False, force_fast=False, llm=None, *,
              eng=None, kbcli=None):
     """对一条标准化记录执行规则 + 知识库 + LLM 混合诊断，返回结构化结果 dict。
@@ -49,17 +57,19 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None, *,
         rule_res = eng.diagnose(rec)
         cls = rule_res.get("class")
         rule_hit = rule_res.get("verdict") == "诊断完成"
+        type_id = (rule_res.get("type") or {}).get("id")
 
         result = {"text": text, "errcode": errcode, "ldate": ldate,
                   "loc": _loc_str(P.parse_lsection(lsection)),
                   "rule_res": rule_res, "kb_card": None,
-                  "answer": None, "source": ""}
+                  "answer": None, "source": "", "telemetry": None}
 
         # ① 规则快速路径：噪音 / 技术错误（引擎直接判定，不查库、不调 LLM）
         if cls in ("noise", "ora"):
             result["answer"] = {"root": rule_res.get("verdict"),
                                 "actions": [], "confidence": 1.0}
             result["source"] = "规则快速路径（噪音/技术错误，零 token）"
+            result["telemetry"] = _mk_telemetry("noise_ora", cls=cls)
             return result
 
         # ② 领域知识层：按归一化中文症状检索 Dimple 知识库（不可用静默降级）
@@ -73,6 +83,8 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None, *,
                 "confidence": 1.0,
                 "secondary": rule_res.get("secondary", [])}
             result["source"] = "规则快速路径（规则查库取证，零 token）"
+            result["telemetry"] = _mk_telemetry("rule_fast", rule_hit=True,
+                                                cls=cls, type_id=type_id)
             return result
 
         if force_fast:
@@ -82,6 +94,7 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None, *,
                 "actions": rule_res.get("action", []),
                 "confidence": 1.0}
             result["source"] = "规则快速路径（force_fast）"
+            result["telemetry"] = _mk_telemetry("force_fast", cls=cls)
             return result
 
         # ④ LLM 兜底（规则未覆盖 / 口语化长尾）
@@ -99,6 +112,10 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None, *,
             ans.setdefault("confidence", 0.0)
             result["answer"] = ans
             result["source"] = "LLM 诊断大脑（规则识别 + KB 知识卡 + 规则取证）"
+            result["telemetry"] = _mk_telemetry(
+                "llm", llm_called=True,
+                fallback_reason="force_llm" if force_llm else "no_type",
+                rule_hit=rule_hit, cls=cls, type_id=type_id)
             return result
         # LLM 不可用 → 回退
         if rule_hit:
@@ -108,12 +125,18 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None, *,
                 "confidence": 1.0,
                 "secondary": rule_res.get("secondary", [])}
             result["source"] = "规则兜底（LLM 未配置/不可用，已按规则查库）"
+            result["telemetry"] = _mk_telemetry(
+                "fallback", llm_called=True, fallback_reason="llm_unavailable",
+                rule_hit=True, cls=cls, type_id=type_id)
             return result
         result["answer"] = {
             "root": "未命中确定性规则，且 LLM 未配置；请人工介入或补充规则。",
             "actions": ["将该报错回流到开发侧，生成并审核新规则后发版"],
             "confidence": 0.0}
         result["source"] = "兜底（LLM 未配置 + 规则未覆盖）"
+        result["telemetry"] = _mk_telemetry(
+            "fallback", llm_called=True, fallback_reason="llm_unavailable",
+            rule_hit=False, cls=cls)
         return result
     finally:
         if owns_eng:

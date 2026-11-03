@@ -11,7 +11,7 @@ GaussDB 版取数方式（无 TLOG）：
 import argparse
 import sys
 
-from ai_ops import pipeline, reporting
+from ai_ops import pipeline, reporting, telemetry
 from ai_ops.engine.rule_engine import Engine
 from ai_ops.engine import error_records as ER
 
@@ -80,6 +80,7 @@ def main(argv=None):
         print("未找到匹配的错误记录")
         sys.exit(1)
 
+    tele_results = []
     for i, rec in enumerate(records):
         if len(records) > 1:
             print("\n########## 记录 %d/%d 来源=%s 主键=%s" %
@@ -93,3 +94,8 @@ def main(argv=None):
         else:
             res = pipeline.diagnose(rec, force_llm=args.llm, force_fast=args.fast)
             print(reporting.render_hybrid(res))
+            tele_results.append(res)
+
+    # 观测基线（3.1）：批量回放尾部输出 LLM 降本率与兜底原因分布
+    if tele_results and len(records) > 1:
+        print("\n" + telemetry.format_summary(telemetry.summarize(tele_results)))
