@@ -77,7 +77,7 @@ types:
   - id: position_limit
     title: 超出会员限仓
     severity: error
-    keywords: ["超出会员限仓", "超出限仓", "会员限仓", "持仓超出限额", "超出交易所限仓", "超出持仓限额"]
+    keywords: ["超出会员限仓", "超出限仓", "会员限仓", "持仓超出限额", "超出交易所限仓", "超出持仓限额", "超过持仓限额"]
     err_codes: []
     param_alias:
       "会员": "member"
@@ -87,7 +87,7 @@ types:
   - id: price_limit
     title: 价格超出涨停板
     severity: error
-    keywords: ["价格超出涨停板", "超出涨停价", "超出跌停价", "价格超出上限", "价格超出下限", "涨跌停"]
+    keywords: ["价格超出涨停板", "超出涨停价", "超出跌停价", "价格超出上限", "价格超出下限", "涨跌停", "价格跌破跌停板", "tick整数倍", "最小单位的倍数"]
     err_codes: []
     param_alias:
       "会员": "member"
@@ -109,7 +109,7 @@ types:
   - id: local_seq
     title: 本地报单号没递增
     severity: error
-    keywords: ["本地报单号没递增", "报单号不递增", "local_no", "报单序号", "序号不递增"]
+    keywords: ["本地报单号没递增", "报单号不递增", "报单号没有递增", "local_no", "报单序号", "序号不递增"]
     err_codes: []
     param_alias:
       "交易员": "trader"
@@ -118,7 +118,7 @@ types:
   - id: market_closed
     title: 闭市/交易暂停/报盘机未连
     severity: error
-    keywords: ["闭市", "连续交易暂停", "非交易时间", "报盘机未连", "API未连", "前置机不可用", "交易暂停", "休市", "报盘机未连接"]
+    keywords: ["闭市", "连续交易暂停", "非交易时间", "报盘机未连", "API未连", "前置机不可用", "交易暂停", "休市", "报盘机未连接", "未处理请求超过许可数", "未复核请求", "已复核请求", "无可用的报盘机", "报盘机工作不正常", "API没有连接交易所前置"]
     err_codes: []
     param_alias:
       "会员": "member"
@@ -128,7 +128,7 @@ types:
   - id: contract_state_error
     title: 合约状态错误
     severity: error
-    keywords: ["合约状态错误", "合约未上市", "合约已退市", "合约暂停交易", "合约不存在", "合约状态异常", "合约不可交易"]
+    keywords: ["合约状态错误", "合约未上市", "合约已退市", "合约暂停交易", "合约不存在", "合约状态异常", "合约不可交易", "合约不可以交易", "只可平仓或卖出", "集合报价或连续交易"]
     err_codes: []
     param_alias:
       "合约": "contract"
@@ -205,7 +205,7 @@ types:
   - id: margin_mismatch
     title: 准备金/保证金对账不平
     severity: error
-    keywords: ["准备金不平", "保证金不平", "对账不平", "初始准备金", "占用保证金"]
+    keywords: ["准备金不平", "保证金不平", "对账不平", "初始准备金", "占用保证金", "手续费不平", "盈亏不平"]
     err_codes: []
     param_alias:
       "会员": "member"
