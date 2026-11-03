@@ -5,6 +5,9 @@
   1. 数据库侧按报错文本 GROUP BY 取 TOP（本地归一化骨架后再聚合）
   2. 对照 errors.yaml 现有 runbook 关键词判定是否覆盖
   3. 输出每张表覆盖率、未覆盖高频骨架（= 待补 runbook 的优先级）
+
+口径注：TOP_N 越大越接近全量（alarm 表 10.7M 条文本细长尾分布，
+LIMIT 200 会把覆盖率低估到 46.9%，实际约 96%），默认 5000 覆盖 >99% 文本。
 """
 import sys
 from collections import defaultdict
@@ -15,6 +18,8 @@ sys.path.insert(0, r"D:\document\yunwei\dimple\AIOps\src")
 from ai_ops.engine.db import query
 from ai_ops.engine.error_records import SOURCES, SCHEMA
 from ai_ops.engine.parser import normalize_skeleton
+
+TOP_N = 5000
 
 RULES = r"D:\document\yunwei\dimple\AIOps\src\ai_ops\assets\rules\errors.yaml"
 with open(RULES, "r", encoding="utf-8") as f:
@@ -51,7 +56,7 @@ for sid, src in SOURCES.items():
     _, r = query("SELECT COUNT(*) FROM %s WHERE %s IS NOT NULL" % (table, text))
     total = r[0][0]
     sql = ("SELECT %s, COUNT(*) AS c FROM %s WHERE %s IS NOT NULL "
-           "GROUP BY %s ORDER BY c DESC LIMIT 200") % (text, table, text, text)
+           "GROUP BY %s ORDER BY c DESC LIMIT %d") % (text, table, text, text, TOP_N)
     _, rows = query(sql)
     sk = defaultdict(int)
     for txt, c in rows:
@@ -66,12 +71,14 @@ for sid, src in SOURCES.items():
             noise += c
         else:
             uncovered[(sid, skeleton)] += c
+    sk_total = sum(sk.values())
+    range_out = total - sk_total  # TOP_N 采样之外（长尾表需 SQL 全量 LIKE 复核）
     grand_total += total
     grand_cov += cov
     grand_noise += noise
     pct = 100.0 * cov / total if total else 0
-    print("[%s] %s  总 %d  TOP覆盖 %d (%.1f%%)  噪音过滤 %d  未覆盖 %d" % (
-        sid, src.label, total, cov, pct, noise, total - cov - noise))
+    print("[%s] %s  总 %d  TOP覆盖 %d (%.1f%%)  噪音过滤 %d  未覆盖 %d  范围外 %d" % (
+        sid, src.label, total, cov, pct, noise, sk_total - cov - noise, range_out))
 print("=" * 100)
 print("合计：总 %d  已覆盖 %d  整体覆盖率 %.1f%%  噪音过滤 %d（不计故障）" % (
     grand_total, grand_cov, 100.0 * grand_cov / grand_total, grand_noise))

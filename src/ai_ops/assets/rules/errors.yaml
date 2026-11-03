@@ -142,7 +142,7 @@ types:
   - id: pl_alert
     title: 盈亏限额报警
     severity: warn
-    keywords: ["盈亏超限", "累计盈亏", "盈亏限额", "亏损超限", "盈利超限"]
+    keywords: ["盈亏超限", "累计盈亏", "盈亏限额", "亏损超限", "盈利超限", "敞口额度", "当前敞口", "设定的限额"]
     err_codes: []
     param_alias:
       "会员": "member"
