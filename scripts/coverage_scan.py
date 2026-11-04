@@ -11,22 +11,24 @@ LIMIT 200 会把覆盖率低估到 46.9%，实际约 96%），默认 5000 覆盖
 """
 import sys
 from collections import defaultdict
+from pathlib import Path
 
 import yaml
 
-sys.path.insert(0, r"D:\document\yunwei\dimple\AIOps\src")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "src"))
 from ai_ops.engine.db import query
 from ai_ops.engine.error_records import SOURCES, SCHEMA
 from ai_ops.engine.parser import normalize_skeleton
 
 TOP_N = 5000
 
-RULES = r"D:\document\yunwei\dimple\AIOps\src\ai_ops\assets\rules\errors.yaml"
+RULES = REPO_ROOT / "src/ai_ops/assets/rules/errors.yaml"
 with open(RULES, "r", encoding="utf-8") as f:
     rules = yaml.safe_load(f)
 KW = [(t["id"], t.get("keywords", [])) for t in rules["types"]]
 
-NOISE_RULES = r"D:\document\yunwei\dimple\AIOps\src\ai_ops\assets\rules\noise_rules.yaml"
+NOISE_RULES = REPO_ROOT / "src/ai_ops/assets/rules/noise_rules.yaml"
 with open(NOISE_RULES, "r", encoding="utf-8") as f:
     noise_rules = yaml.safe_load(f)
 NOISE_KW = list(noise_rules.get("noise_contains", []))
