@@ -20,7 +20,12 @@ demo = ["streamlit>=1.30"]
 
 [dependency-groups]
 dev = [
+    # tests/unit/test_api.py 经 fastapi.TestClient 导入 ai_ops.api；无 extra 的
+    # 核心环境（uv sync 后直接 pytest）也必须能收集，故测试所需的 fastapi/pydantic
+    # 归入 dev 组；uvicorn/pymysql 仅运行服务时需要，仍留在 api extra。
+    "fastapi>=0.115",
     "httpx>=0.28.1",
+    "pydantic>=2",
     "pytest>=8",
 ]
 
