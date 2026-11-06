@@ -1,0 +1,41 @@
+# 诊断树：闭市/连续交易暂停/报盘机/API未连（GaussDB 新增，ftr_err 1,101 条）
+# 报错形如：闭市 / 连续交易暂停 / 非交易时间 / 报盘机未连接 / API未连 / 前置机不可用
+# 业务含义：委托在非交易时段提交，或者报盘网关/前置机断开，委托无法路由到交易所。
+# 处理：交易日历 + 当日委托链路活动双重检查。
+# 数据现状：tc_trade_session / tc_gateway_status 在 GaussDB 清单中不存在，
+#           "当前时刻是否在交易时段"无法从库内判断，以当日该会员是否有委托记录
+#           作为报盘链路活动的旁证。
+id: rb_market_closed
+title: 闭市/交易暂停/报盘机未连
+steps:
+  - id: is_trade_date
+    type: sql_check
+    title: 交易日检查
+    expect: {exists: true}
+    sql: "SELECT trade_date, note FROM dimple.tp_exch_trade_date WHERE trade_date = :trade_date"
+    on_fail:
+      root: "当日（{trade_date}）不在交易日历：当天为节假日/周末，非交易日，不应提交委托"
+      action:
+        - "检查交易日历与节假日配置是否正确"
+        - "确认委托发起时间是否正常（非交易日触发了自动化策略？）"
+
+  - id: member_order_activity
+    type: sql_check
+    title: 当日该会员委托链路活动检查
+    primary: true
+    expect: {exists: true}
+    sql: "SELECT trade_date, member_id, COUNT(*) AS order_cnt FROM dimple.tt_ftr_order WHERE trade_date = :trade_date AND member_id = :member GROUP BY trade_date, member_id"
+    on_fail:
+      root: "当日该会员在期货委托表无任何委托记录：报盘链路可能未连接/前置机不可用，或该会员当日确实无业务"
+      action:
+        - "在报盘网关监控界面确认网关进程是否运行、与交易所前置机的连接状态"
+        - "检查交易所是否发布了该会员的交易暂停/闭市通知"
+        - "若为定时策略在非交易时段触发，检查策略触发时间配置"
+
+default:
+  root: "交易日和交易时段检查通过但仍报闭市/未连：可能为报盘网关与交易所前置机的 TCP 连接断开（未在数据库记录），或交易所侧临时暂停了该会员的交易权限"
+  action:
+    - "在报盘网关监控界面确认网关进程是否运行、与交易所前置机的连接状态"
+    - "检查交易所是否发布了该会员/合约的交易暂停通知"
+    - "重启报盘网关进程或触发重连，确认连接恢复后重新提交"
+    - "若为 API 直连，检查 API 密钥是否过期、IP 白名单是否变化"

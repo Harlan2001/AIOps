@@ -1,0 +1,34 @@
+# 诊断树：自成交次数预警（rule_alarm）
+# 报错形如：已自成交次数/预警阀值 / 自成交次数超限 / 自成交预警
+# 业务含义：同一账户/会员在某个时间窗口内的自成交次数超过了风控配置的预警阈值，
+#           系统发出预警提示（与 ftr_err 的"自成交风险"不同——后者是实时拦截，前者是事后统计预警）。
+id: rb_self_trade_alert
+title: 自成交次数预警
+steps:
+  - id: self_trade_threshold
+    type: sql_check
+    title: 自成交预警阈值配置
+    primary: true
+    expect: {exists: true}
+    # 原 tc_self_trade_config 在 GaussDB 清单中不存在，改查报价风控参数表 tc_quote_risk_config；
+    # 自成交预警对应的 risk_type(字典409) 取值需业务确认
+    sql: "SELECT member_id, client_id, contract_id, risk_type, numbers_limit, duration_limit, if_valid FROM dimple.tc_quote_risk_config WHERE member_id = :member AND client_id = :client"
+    on_fail:
+      root: "未配置自成交预警阈值：会员 {member} 客户 {client} 在风控参数表无记录（系统使用全局默认阈值）"
+      action:
+        - "在【自成交监控配置】中为该会员/客户设置预警阈值和拦截阈值"
+
+  - id: self_trade_stat
+    type: sql_query
+    title: 近期自成交相关报警（旁证，看次数与趋势）
+    # 原 tc_self_trade_stat 不存在，改查报警历史表 tc_his_alarm_note 中"自成交"类内容
+    sql: "SELECT alarm_date, alarm_type, member_id, variety_id, alarm_note FROM dimple.tc_his_alarm_note WHERE member_id = :member AND alarm_note LIKE '%自成交%' ORDER BY alarm_date DESC, seq_no DESC LIMIT 10"
+
+default:
+  root: "自成交次数预警：会员 {member} 客户 {client} 在统计窗口内的自成交次数已达预警阈值。需确认是否为策略正常对冲（做市/套利）产生的技术性自成交，还是真正的洗售（wash trade）违规"
+  action:
+    - "核对自成交明细记录，确认每次自成交的合约、方向、时间间隔"
+    - "如为做市商策略的正常双边报价成交（买卖均被对手方击中），申请自成交豁免/白名单"
+    - "如为套利策略两条腿误配到同一账户，分账户执行或加策略隔离标识"
+    - "如为真实洗售嫌疑，暂停相关策略并上报合规"
+    - "调整做市策略的报价逻辑，避免买卖报价同时被同一对手方成交"

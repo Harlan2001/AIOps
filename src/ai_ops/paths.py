@@ -17,8 +17,6 @@ from pathlib import Path
 # 环境变量 -> (开发态相对仓库根路径, 容器默认路径)
 _DIRS = {
     "config": ("config", "/app/config"),
-    "models": ("var/models", "/app/models"),
-    "data": ("var/data", "/app/data"),
     "reports": ("var/reports", "/app/reports"),
 }
 
@@ -55,19 +53,6 @@ def config_dir():
 def config_file(name):
     """配置文件路径（name 不带扩展名），如 config_file('db') -> config/db.yaml。"""
     return config_dir() / (name + ".yaml")
-
-
-def models_dir():
-    return _dir("models", env="AIOPS_MODELS_DIR")
-
-
-def data_dir():
-    return _dir("data", env="AIOPS_DATA_DIR")
-
-
-def dataset_csv():
-    """ML 训练数据集（带标签的全量历史日志）。"""
-    return data_dir() / "ml" / "dataset.csv"
 
 
 def reports_dir():

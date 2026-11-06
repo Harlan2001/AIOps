@@ -1,0 +1,40 @@
+# 诊断树：平仓数量不够（GaussDB 新增，真实报错）
+# 报错形如：平仓数量不够，不能平仓! / 历史仓数量不够，不能平历史仓! / 客户无足够的平仓数量
+# 业务含义：平仓委托数量超过该交易员名下在该合约的可用持仓（扣除冻结）。
+id: rb_close_posi
+title: 平仓数量不够
+steps:
+  - id: is_trade_date
+    type: sql_check
+    title: 交易日检查
+    expect: {exists: true}
+    sql: "SELECT trade_date, note FROM dimple.tp_exch_trade_date WHERE trade_date = :trade_date"
+    on_fail:
+      root: "当日（{trade_date}）不在交易日历，或交易日历/节假日尚未配置"
+      action:
+        - "检查交易日历与节假日是否已维护到该日期"
+
+  - id: trader_posi
+    type: sql_check
+    title: 交易员持仓检查（要平仓的头寸）
+    primary: true
+    expect: {exists: true}
+    sql: "SELECT clear_date, client_id, user_id, contract_id, sh_flag, last_buy_qty, last_sell_qty, buy_qty, sell_qty FROM dimple.tc_ftr_trader_posi_clear WHERE clear_date = :trade_date AND member_id = :member AND user_id = :trader AND contract_id = :contract"
+    on_fail:
+      root: "交易员 {trader} 名下在 {contract} 查无可用持仓，无法平仓 {qty} 手：客户持仓可能未分配到该交易员，或已被其他平仓委托冻结"
+      action:
+        - "在【持仓管理】核对该合约持仓是否已分配给交易员 {trader}"
+        - "检查是否有未成交的平仓委托冻结了头寸，先撤单释放"
+        - "由实际持仓归属的交易员发起平仓，或调整委托数量"
+
+  - id: client_posi
+    type: sql_query
+    title: 客户持仓检查（旁证，看客户总持仓）
+    sql: "SELECT clear_date, contract_id, sh_flag, last_buy_qty, last_sell_qty, buy_qty, sell_qty FROM dimple.tc_ftr_client_posi_clear WHERE clear_date = :trade_date AND member_id = :member AND client_id = :client AND contract_id = :contract"
+
+default:
+  root: "交易员 {trader} 在 {contract} 名下有持仓但可用数量不足，本次要平仓 {qty} 手（持仓可能已被其他平仓委托冻结，或客户持仓未足额分配到该交易员）"
+  action:
+    - "核对交易员持仓（上日/可用）与冻结数量，计算实际可平头寸"
+    - "检查是否有未成交的平仓委托冻结，先撤单释放后再试"
+    - "减少本次平仓数量，或由实际持仓归属的交易员发起"

@@ -1,0 +1,30 @@
+# 诊断树：准备金/保证金对账不平（flow_control 约 2,500 条）
+# 报错形如：初始准备金不平 / 上日占用保证金不平 / 对账不平
+# 业务含义：结算后对账发现准备金或保证金科目两边不平（如清算系统 vs 交易所流水、
+#           上期所/金交所/中金所各科目余额不一致），阻止结算流程继续。
+# 数据现状：tc_margin_detail / tc_reserve_detail 在 GaussDB 清单中不存在；
+#           科目余额旁证待业务确认对应表（候选：tc_clear_money / tc_origin_money）后补充，
+#           当前保留结算流程状态主检查（tc_his_flow_control）+ 默认话术。
+id: rb_margin_mismatch
+title: 准备金/保证金对账不平
+steps:
+  - id: settlement_status
+    type: sql_check
+    title: 结算流程状态检查
+    primary: true
+    expect: {exists: true}
+    sql: "SELECT clear_date, flow_code, exch_code, oper_name, oper_flag, oper_result, oper_time FROM dimple.tc_his_flow_control WHERE clear_date = :trade_date AND flow_code = :flow_code AND exch_code = :exch"
+    on_fail:
+      root: "未找到结算流程记录：结算日期 {trade_date} 交易所 {exch} 流程码 {flow_code} 在流程控制历史表无记录（结算流程未启动或流程码错误）"
+      action:
+        - "检查结算流程是否已正常启动，流程码是否正确"
+        - "确认结算参数（clear_date, exch_code）是否与业务日期一致"
+
+default:
+  root: "准备金/保证金对账不平：结算日期 {trade_date} 交易所 {exch} 会员 {member} 的准备金或保证金科目两边余额不一致。常见原因：当日有未入账的出入金/调账、交易所流水未全部同步、手续费/交割费计算口径不一致、或历史差异滚动累积"
+  action:
+    - "逐科目核对清算系统与交易所流水的差异（按保证金类型/准备金子项展开）"
+    - "检查当日是否有手工调账、出入金、交割等未在两边同步的操作"
+    - "如为历史差异累积，定位首次不平的结算日期，逐日回卷对账"
+    - "在【对账差异处理】中录入差异原因，经复核后可做调账处理（强制平账需双人复核）"
+    - "重跑当前结算步骤（保证金计算/准备金计算）后重新对账"

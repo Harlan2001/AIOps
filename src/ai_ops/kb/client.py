@@ -8,7 +8,7 @@
 - 知识库只读 SQL 默认不自动执行（execute_kb_sql=false），仅作为建议文本与报告展示；
 - 检索键使用中文症状（日志骨架），不使用 TLOG 数字错误码（两套编码体系不一致）。
 
-接入位置：pipeline 在 ML 判为 biz 后，与"相似案例召回""规则查库"并行检索本层。
+接入位置：pipeline 在规则引擎识别业务报错后，与"规则查库取证"并行检索本层。
 配置优先级：默认值 < config/kb.yaml < AIOPS_KB_* 环境变量 < 显式构造参数。
 """
 import importlib.util

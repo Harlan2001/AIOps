@@ -12,6 +12,8 @@ import re
 
 # [字段=>值] 或 [字段->值]
 _PARAM_RE = re.compile(r"\[([^\[\]=>\-]+?)\s*(=>|->)\s*([^\]]*)\]")
+# 标签[值] 格式（GaussDB 错误表常见，如 会员[016811], 交易员[trader1], 品种[au]）
+_LABEL_VAL_RE = re.compile(r"([\u4e00-\u9fff]{2,})\s*\[([^\[\]=>]+)\]")
 _NUM_RE = re.compile(r"\d+")
 _WS_RE = re.compile(r"\s+")
 # CLEAR.PKC_MAIN.SP_XXX:940  或  block:2.CLEAR.PKC_..SP_..:940
@@ -22,7 +24,7 @@ _CN_RE = re.compile(r"[\u4e00-\u9fff]")
 # 定时任务流水类"假 ERROR"（成功/无数据/完成）
 NOISE_KW = ("成功", "完成", "启动", "恢复", "无需要发送", "已处理", "已恢复")
 # 真正的业务报错词
-ERROR_KW = ("不存在", "失败", "异常", "错误", "不允许", "不可", "不足", "不能为空", "不能",
+ERROR_KW = ("不存在", "失败", "异常", "错误", "不允许", "不可", "不足", "不够", "不能为空", "不能",
             "冲突", "超时", "重复", "非法", "无法", "请检查", "未", "没有", "不一致", "不匹配")
 
 
@@ -30,9 +32,17 @@ def is_chinese(text):
     return bool(_CN_RE.search(text or ""))
 
 
-def is_ora(text):
+def is_tech_error(text):
+    """识别数据库技术错误（非业务报错）：Oracle 的 ORA-/SQLCODE，
+    GaussDB/PG 的 SQLSTATE、ERROR:/FATAL: 前缀。"""
     t = text or ""
-    return ("ORA-" in t) or ("SQLCODE" in t)
+    if ("ORA-" in t) or ("SQLCODE" in t) or ("SQLSTATE" in t) or ("FATAL:" in t):
+        return True
+    return t.lstrip().startswith("ERROR:")
+
+
+# 向后兼容别名
+is_ora = is_tech_error
 
 
 def normalize_skeleton(text):
@@ -46,10 +56,14 @@ def normalize_skeleton(text):
 
 
 def extract_params(text):
-    """从一条具体报错抽取参数：返回 {字段名: 值}。"""
+    """从一条具体报错抽取参数：返回 {字段名: 值}。
+    支持 [字段=>值] / [字段->值] 与 标签[值]（如 会员[016811]）两种格式。"""
     d = {}
     for field, _sep, val in _PARAM_RE.findall(text or ""):
         field = field.strip()
+        if field not in d:
+            d[field] = val.strip()
+    for field, val in _LABEL_VAL_RE.findall(text or ""):
         if field not in d:
             d[field] = val.strip()
     m = re.search(r"尚缺\s*<\s*([0-9]+)\s*>", text or "")
