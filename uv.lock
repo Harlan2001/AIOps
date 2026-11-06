@@ -32,7 +32,9 @@ demo = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "fastapi" },
     { name = "httpx" },
+    { name = "pydantic" },
     { name = "pytest" },
 ]
 
@@ -50,7 +52,9 @@ provides-extras = ["api", "demo"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "pydantic", specifier = ">=2" },
     { name = "pytest", specifier = ">=8" },
 ]
 
