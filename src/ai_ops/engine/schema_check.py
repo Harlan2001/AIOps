@@ -12,7 +12,14 @@ import warnings
 
 from ai_ops import paths, rules_store
 
-CATALOG = paths.REPO_ROOT / "docs" / "error" / "GaussDB_dimple_全量表结构与字段含义清单.md"
+# 已安装态（wheel 交付、无源码仓库）探测不到 REPO_ROOT，且清单文档不随包分发：
+# 此时置 None，由 catalog_available() 统一走“缺清单 -> warning 降级”。
+# 切勿在此无条件拼接路径——REPO_ROOT 为 None 时 `None / "docs"` 会在 import 期
+# 直接 TypeError，导致 Engine() 无法构造（降级守卫根本来不及执行）。
+CATALOG = (
+    paths.REPO_ROOT / "docs" / "error" / "GaussDB_dimple_全量表结构与字段含义清单.md"
+    if paths.REPO_ROOT else None
+)
 
 # 提取 SQL 列引用时的非列白名单（同 test_runbook_integrity，保持一致）
 SQL_NON_COL = {
@@ -26,7 +33,8 @@ SQL_NON_COL = {
 
 def catalog_available(path=None):
     """表结构清单文档是否存在（wheel 交付可能不含 docs/，此时跳过 fail-fast）。"""
-    return (path or CATALOG).is_file()
+    p = path or CATALOG
+    return bool(p) and p.is_file()
 
 
 def load_catalog(path=None):
