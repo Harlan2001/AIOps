@@ -1,0 +1,67 @@
+name: CI
+
+# 对所有 PR 与 main 推送生效；同分支新推送取消旧运行，省额度。
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 核心环境：只装运行时依赖（py-opengauss + pyyaml），不应依赖任何 extra
+          - name: core-no-extras
+            sync-args: ""
+          # 服务化环境：装 api extra（fastapi/uvicorn/pydantic/pymysql）
+          - name: api-extra
+            sync-args: "--extra api"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync ${{ matrix.sync-args }}
+
+      - name: Run pytest
+        run: uv run pytest
+
+  wheel-build-smoke:
+    name: wheel-build-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Build wheel
+        run: uv build --wheel
+
+      # 全新空 venv 只装该 wheel（带核心依赖），验证打包完整性：
+      # 资源 YAML 是否进包、核心依赖是否齐全、导入链是否可用。
+      # 用 -I 隔离模式，确保 import 走已安装 wheel 而非仓库源码目录。
+      - name: Smoke install in clean venv
+        run: |
+          uv venv /tmp/smoke
+          uv pip install --python /tmp/smoke/bin/python dist/*.whl
+          /tmp/smoke/bin/python -I -c "from ai_ops.engine.rule_engine import Engine; from ai_ops.rules_store import load_runbook; import ai_ops.cli; e=Engine(); load_runbook('rb_settle_price'); print('types=%d noise=%d' % (len(e.types), len(e.noise_kw)))"
