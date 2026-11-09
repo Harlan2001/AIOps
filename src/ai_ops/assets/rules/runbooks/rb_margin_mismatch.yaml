@@ -3,22 +3,26 @@
 # 业务含义：结算后对账发现准备金或保证金科目两边不平（如清算系统 vs 交易所流水、
 #           上期所/金交所/中金所各科目余额不一致），阻止结算流程继续。
 # 数据现状：tc_margin_detail / tc_reserve_detail 在 GaussDB 清单中不存在；
-#           科目余额旁证待业务确认对应表（候选：tc_clear_money / tc_origin_money）后补充，
-#           当前保留结算流程状态主检查（tc_his_flow_control）+ 默认话术。
+#           科目余额旁证待业务确认对应表（候选：tc_clear_money / tc_origin_money）后补充。
+# 主检查设计（B3 修复）：不再用三列主键 exists:true（对该来源记录恒真、on_fail 不可达），
+#           改为在 SQL 中过滤 oper_result='0'（0=对账不成功），用 exists 判定当日是否真有
+#           对账失败记录；同时移除无法从文本/回放获得的 :flow_code，仅按 clear_date +
+#           exch_code 定位。
 id: rb_margin_mismatch
 title: 准备金/保证金对账不平
 steps:
   - id: settlement_status
     type: sql_check
-    title: 结算流程状态检查
+    title: 对账失败流程记录检查
     primary: true
     expect: {exists: true}
-    sql: "SELECT clear_date, flow_code, exch_code, oper_name, oper_flag, oper_result, oper_time FROM dimple.tc_his_flow_control WHERE clear_date = :trade_date AND flow_code = :flow_code AND exch_code = :exch"
+    sql: "SELECT clear_date, flow_code, exch_code, oper_name, oper_flag, oper_result, oper_time, err_msg FROM dimple.tc_his_flow_control WHERE clear_date = :trade_date AND exch_code = :exch AND oper_result = '0' ORDER BY oper_time DESC"
     on_fail:
-      root: "未找到结算流程记录：结算日期 {trade_date} 交易所 {exch} 流程码 {flow_code} 在流程控制历史表无记录（结算流程未启动或流程码错误）"
+      root: "未发现对账不成功的流程记录：结算日期 {trade_date} 交易所 {exch} 在流程控制历史表无 oper_result=0 的记录（可能流程未启动、流程码错误，或证据未取到，结论仅基于默认话术）"
       action:
         - "检查结算流程是否已正常启动，流程码是否正确"
         - "确认结算参数（clear_date, exch_code）是否与业务日期一致"
+        - "核对交易所参数 exch 是否与报错一致"
 
 default:
   root: "准备金/保证金对账不平：结算日期 {trade_date} 交易所 {exch} 会员 {member} 的准备金或保证金科目两边余额不一致。常见原因：当日有未入账的出入金/调账、交易所流水未全部同步、手续费/交割费计算口径不一致、或历史差异滚动累积"
