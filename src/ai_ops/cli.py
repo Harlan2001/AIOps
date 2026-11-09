@@ -5,6 +5,7 @@ GaussDB 版取数方式（无 TLOG）：
   --source 来源 --date 日期                诊断该来源当日全部错误（回放）
   --source 来源 --date 日期 --trader-no ..  按主键取单条
   --all-sources --date 日期                跨来源诊断当日全部错误
+  --limit N                                回放时每个来源最多取 N 条（防无上限全量回放）
   --text "报错文本"                        直接传文本
 默认查历史表，加 --today 查当日表。
 """
@@ -42,6 +43,8 @@ def _build_parser():
     ap.add_argument("--llm", action="store_true", help="强制走 LLM")
     ap.add_argument("--fast", action="store_true", help="强制规则快速路径（不调 LLM）")
     ap.add_argument("--rule", action="store_true", help="纯规则模式（不依赖 ML/LLM）")
+    ap.add_argument("--limit", type=int, default=None,
+                    help="回放时每个来源最多取 N 条（--all-sources 按来源分别限制）")
     return ap
 
 
@@ -52,8 +55,9 @@ def _resolve_records(args):
     if not args.date:
         return None
     history = not args.today
+    limit = max(1, args.limit) if args.limit else None
     if args.all_sources:
-        return ER.list_by_date(args.date, history=history)
+        return ER.list_by_date(args.date, history=history, limit=limit)
     if not args.source:
         return None
 
@@ -67,7 +71,7 @@ def _resolve_records(args):
         key[ER.date_col_of(src, history)] = args.date
         rec = ER.get_record(args.source, key, history=history)
         return [rec] if rec else []
-    return ER.list_records(args.source, args.date, history=history)
+    return ER.list_records(args.source, args.date, history=history, limit=limit)
 
 
 def main(argv=None):

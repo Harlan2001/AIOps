@@ -194,11 +194,12 @@ def list_records(source, date, history=True, only_text=True, limit=None):
     return [_normalize(src, d, history) for d in rows]
 
 
-def list_by_date(date, sources=None, history=True, only_text=True):
-    """跨来源取某日全部错误记录。"""
+def list_by_date(date, sources=None, history=True, only_text=True, limit=None):
+    """跨来源取某日全部错误记录；limit 为每个来源的最大取数条数（N5）。"""
     out = []
     for sid in (sources or list(SOURCES)):
-        out.extend(list_records(sid, date, history=history, only_text=only_text))
+        out.extend(list_records(sid, date, history=history,
+                                only_text=only_text, limit=limit))
     return out
 
 

@@ -295,3 +295,35 @@ def test_b7_records_endpoint_limit_capped(client, monkeypatch):
                    params={"source": "ftr_err", "date": "20250101", "limit": 99999})
     assert r.status_code == 200
     assert r.json()["count"] == MAX_BATCH
+
+
+# ---------- N5：CLI --limit 真实存在并透传给取数 ----------
+
+
+def test_n5_cli_accepts_limit_and_passes_through(monkeypatch):
+    """README 示例的 --limit 必须真实可解析，并透传到 list_records/list_by_date。"""
+    from ai_ops import cli
+
+    seen = {}
+
+    def fake_list_records(source, date, history=True, only_text=True, limit=None):
+        seen["limit"] = limit
+        return [{"text": "x", "source": source, "key": {}, "errcode": 0}]
+
+    def fake_list_by_date(date, history=True, limit=None):
+        seen["limit_all"] = limit
+        return [{"text": "x", "source": "ftr_err", "key": {}, "errcode": 0}]
+
+    monkeypatch.setattr(ER, "list_records", fake_list_records)
+    monkeypatch.setattr(ER, "list_by_date", fake_list_by_date)
+
+    args = cli._build_parser().parse_args(
+        ["--source", "ftr_err", "--date", "20261030", "--limit", "5"])
+    assert args.limit == 5
+    cli._resolve_records(args)
+    assert seen["limit"] == 5
+
+    args_all = cli._build_parser().parse_args(
+        ["--all-sources", "--date", "20261030", "--limit", "3"])
+    cli._resolve_records(args_all)
+    assert seen["limit_all"] == 3
