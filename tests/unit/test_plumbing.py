@@ -71,6 +71,25 @@ def test_render_rule_noise():
     assert "业务报错智能诊断报告" in out and "非故障提示" in out
 
 
+def test_render_rule_error_evidence_no_keyerror():
+    """C3 回归：取证 SQL 失败（仅 status=error、无 rows 键）时报告不得 KeyError。"""
+    res = {
+        "class": "biz", "text": "结算价不存在", "verdict": "诊断完成",
+        "type": {"id": "settle_price_not_found", "title": "结算价不存在"},
+        "params": {"trade_date": "20250305"},
+        "root": "结算价不存在",
+        "action": ["补录结算价"],
+        "evidence": [
+            {"title": "当日结算价", "r": {"status": "error", "error": "表不存在"}},
+            {"title": "缺参取证", "r": {"status": "missing_params", "missing": ["contract"]}},
+        ],
+        "sql_errors": [{"step": "当日结算价", "error": "表不存在"}],
+    }
+    out = reporting.render_rule(res)
+    assert "取证失败（表不存在）" in out
+    assert "缺少参数 contract" in out
+
+
 def test_render_hybrid_rule_fast():
     res = {"text": "x", "errcode": 0, "ldate": "", "loc": "",
            "rule_res": {"class": "noise", "verdict": "非故障提示，无需诊断"},
