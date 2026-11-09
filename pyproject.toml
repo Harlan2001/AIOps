@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# P1 服务化才安装（FastAPI 薄封装内核 + MySQL 业务库）；未装时 ai-ops api 子命令延迟报错
+# P1 服务化才安装（FastAPI 薄封装内核；未装 api extra 时 HTTP 相关模块不可用）
 api = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "pydantic>=2", "pymysql>=1.1"]
 # P1 演示前端（Streamlit）
 demo = ["streamlit>=1.30"]

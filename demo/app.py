@@ -2,6 +2,7 @@
 """AIOps 智能诊断工作台 —— GaussDB 信创版（Streamlit 演示）。
 
 渲染层：本文件只负责 Streamlit UI；业务逻辑在 ai_ops.service（服务层）。
+D1 方案 C：默认纯规则零 token；可选 LLM 升级（escalate，受部署 allow_escalation 约束）。
 
 启动（仓库根）：
   uv sync --extra demo
@@ -18,7 +19,7 @@ st.set_page_config(page_title="DIMPLE 报错智能诊断工作台（GaussDB）",
 
 @st.cache_resource(show_spinner=False)
 def get_service():
-    """缓存诊断服务实例（含规则引擎 / 知识库 / ML 相似案例索引）。"""
+    """缓存诊断服务实例（含规则引擎 / 知识库 / LLM 客户端）。"""
     return DiagnosticService()
 
 
@@ -32,19 +33,9 @@ def gauss_check(force=False):
     return info["ok"], info["msg"]
 
 
-def render_one(rec, res):
-    cls = res.get("class")
-    st.markdown("**报错文本**：%s" % rec.get("text", ""))
-    st.caption("时间：%s ｜ 来源：%s" % (rec.get("ldate") or "-",
-               (rec.get("source_label") or rec.get("source") or "文本直输")))
-    if cls in ("noise", "ora", "other") or "type" not in res:
-        st.info(res.get("verdict", ""))
-        return
-    t = res.get("type") or {}
-    st.markdown("**问题类型**：%s（%s）" % (t.get("title"), t.get("id")))
-
-    # 证据表
-    for ev in res.get("evidence", []):
+def render_evidence(rule_res):
+    """渲染规则取证证据表（数据取自契约内的 rule_res）。"""
+    for ev in rule_res.get("evidence", []):
         r = ev.get("r", {})
         if r.get("status") == "missing_params":
             st.markdown("- **%s**：缺少参数 %s，跳过" % (ev.get("title"),
@@ -60,38 +51,66 @@ def render_one(rec, res):
             st.dataframe(pd.DataFrame(rows, columns=r.get("cols")),
                          use_container_width=True, hide_index=True)
 
-    # 降级可见化（阶段 3·③）：SQL 取证失败显式警示，避免误把降级结论当完整诊断
-    sql_errs = res.get("sql_errors") or []
-    if sql_errs:
-        st.warning("**降级提示**：%d 条取证 SQL 未成功执行，本条结论可能基于不完整证据，请谨慎采信。"
-                   % len(sql_errs))
+
+def render_kb_card(kb_card):
+    """渲染知识库机制卡（仅升级路径可能返回）。"""
+    if not kb_card or not kb_card.get("cards"):
+        return
+    st.markdown("#### 知识库机制卡（KB 知识层）")
+    for c in kb_card["cards"][:3]:
+        st.markdown("- **%s**" % c["title"])
+        st.caption("机制要点：" + "；".join(c.get("required_facts", [])[:4]))
+        for q in c.get("readonly_queries", [])[:2]:
+            st.caption("只读取证：%s（表 %s）" % (q.get("purpose"), q.get("table")))
+
+
+def render_one(rec, res):
+    """渲染一条契约结果（DiagnosisResult 形状）。"""
+    st.markdown("**报错文本**：%s" % rec.get("text", ""))
+    st.caption("时间：%s ｜ 来源：%s" % (rec.get("ldate") or "-",
+               (rec.get("source_label") or rec.get("source") or "文本直输")))
+    st.caption("结论来源：%s ｜ escalated=%s" % (res.get("source"), res.get("escalated")))
+
+    rule_res = res.get("rule_res") or {}
+    t = rule_res.get("type") or {}
+    if t:
+        st.markdown("**问题类型**：%s（%s）" % (t.get("title"), t.get("id")))
+
+    render_evidence(rule_res)
+
+    # 降级可见化：缺参/失败 SQL 显式警示
+    sql_errs = rule_res.get("sql_errors") or []
+    missing = rule_res.get("missing_params") or []
+    if sql_errs or missing:
+        st.warning("**降级提示**：%d 条取证 SQL 未成功执行、%d 步缺参，本条结论可能基于不完整证据，请谨慎采信。"
+                   % (len(sql_errs), len(missing)))
+        for m in missing:
+            st.caption("step %s：缺少参数 %s" % (m.get("step"), "、".join(m.get("missing", []))))
         for e in sql_errs:
             st.caption("step %s：%s" % (e.get("step"), e.get("error", "")))
 
+    answer = res.get("answer") or {}
     st.markdown("#### 问题是什么")
-    st.write(res.get("root", ""))
-    for sec in res.get("secondary", []):
+    st.write(answer.get("root", ""))
+    if answer.get("evidence_note"):
+        st.caption(answer["evidence_note"])
+    for sec in answer.get("secondary", []):
         st.caption("附带发现（%s）：%s" % (sec.get("title"), sec.get("root")))
     st.markdown("#### 怎么解决")
-    for i, a in enumerate(res.get("action", []), 1):
-        st.markdown("%d. %s" % (i, a))
+    actions = answer.get("actions", [])
+    if actions:
+        for i, a in enumerate(actions, 1):
+            st.markdown("%d. %s" % (i, a))
+    else:
+        st.caption("（无规则处置动作，按上述排查方向人工确认）")
 
-    # 知识库机制卡（数据获取在服务层，页面只负责展示）
-    svc = get_service()
-    kcard = svc.kb_card(rec.get("text", ""))
-    if kcard and kcard.get("cards"):
-        st.markdown("#### 知识库机制卡（KB 知识层）")
-        for c in kcard["cards"][:3]:
-            st.markdown("- **%s**" % c["title"])
-            st.caption("机制要点：" + "；".join(c["required_facts"][:4]))
-            for q in c["readonly_queries"][:2]:
-                st.caption("只读取证：%s（表 %s）" % (q["purpose"], q["table"]))
+    render_kb_card(res.get("kb_card"))
 
 
 def sidebar():
     with st.sidebar:
         st.markdown("### 🩺 DIMPLE 诊断工作台")
-        st.caption("GaussDB 信创版 · 纯规则诊断")
+        st.caption("GaussDB 信创版 · 默认纯规则 · 可选 LLM 升级")
         st.divider()
         ok, msg = gauss_check()
         st.markdown("🟢 GaussDB 已连接" if ok else "🔴 GaussDB 未连接")
@@ -100,7 +119,16 @@ def sidebar():
             gauss_check(force=True)
             st.rerun()
         st.divider()
-        st.caption("诊断走 runbook 规则引擎：可解释、零 token、秒级。")
+        st.caption("默认走 runbook 规则引擎：可解释、零 token、秒级；显式升级才可能调 LLM。")
+
+
+def _run_path(svc, recs, escalate):
+    """统一诊断入口：升级受部署允许位约束，未允许则提示并纯规则。"""
+    do_escalate = escalate and svc.escalation_allowed()
+    if escalate and not do_escalate:
+        st.warning("当前部署未启用 LLM 升级（allow_escalation=false），已按纯规则诊断。")
+    pairs = svc.diagnose_many_isolated(recs, [do_escalate] * len(recs))
+    return pairs
 
 
 def page_real():
@@ -120,6 +148,7 @@ def page_real():
         trader_no = c3.text_input("交易员（可选）")
         local_no = c4.text_input("本地委托号（可选）")
         purpose = c5.text_input("交易目的（可选）")
+        escalate = st.checkbox("允许 LLM 升级（逐条显式；整表回放默认不扇出）", value=False)
         run = st.button("▶ 开始诊断", type="primary", key="run_real")
 
     # 一键演示：敞口 / 平仓 / 策略资金不足，均为真实错误记录
@@ -127,7 +156,7 @@ def page_real():
     if demo_key in ("exposure", "close_posi", "fund"):
         st.session_state["demo"] = None
         rec = svc.demo_record(demo_key)
-        pairs = svc.diagnose_many([rec]) if rec else []
+        pairs = _run_path(svc, [rec], escalate) if rec else []
     elif run:
         if trader_no and local_no:
             src = svc.sources()[source]
@@ -135,10 +164,11 @@ def page_real():
             if purpose:
                 key["purpose_code"] = purpose
             rec = svc.get_record(source, key)
-            pairs = svc.diagnose_many([rec]) if rec else []
+            pairs = _run_path(svc, [rec], escalate) if rec else []
         else:
-            recs = svc.list_records(source, date)
-            pairs = svc.diagnose_many(recs)
+            recs = svc.list_records(source, date, limit=200)
+            # 整表回放：纯规则，不做 LLM 扇出
+            pairs = svc.diagnose_many_isolated(recs)
     else:
         pairs = []
 
@@ -148,15 +178,18 @@ def page_real():
         if len(pairs) > 1:
             st.markdown("### 记录 %d/%d" % (i + 1, len(pairs)))
         with st.container(border=True):
+            if isinstance(res, dict) and res.get("_diagnose_error"):
+                st.error("本条诊断异常：%s" % res["_diagnose_error"])
+                continue
             render_one(rec, res)
             st.divider()
             st.caption("文本版报告：")
-            st.code(reporting.render_rule(res), language="text")
+            st.code(reporting.render_rule(res.get("rule_res")), language="text")
 
 
 def page_text():
     st.title("📝 文本诊断")
-    st.caption("直接传入报错文本，用 runbook 规则诊断。")
+    st.caption("直接传入报错文本，用 runbook 规则诊断；可显式升级 LLM。")
     svc = get_service()
     with st.container(border=True):
         if st.button("演示② 结算价不存在（Au(T+D)）", use_container_width=True,
@@ -165,15 +198,17 @@ def page_text():
             st.session_state["ldate"] = "20250305"
         text = st.text_area("报错文本", key="text", height=80)
         ldate = st.text_input("业务日期 YYYYMMDD", key="ldate")
+        escalate = st.checkbox("允许 LLM 升级（escalate）", value=False)
         run = st.button("▶ 开始诊断", type="primary", key="run_text")
 
     if run and text:
         rec = {"text": text, "ldate": ldate, "errcode": 0, "lsection": ""}
-        res = svc.diagnose(rec)
+        pairs = _run_path(svc, [rec], escalate)
+        _rec, res = pairs[0]
         with st.container(border=True):
             render_one(rec, res)
             st.divider()
-            st.code(reporting.render_rule(res), language="text")
+            st.code(reporting.render_rule(res.get("rule_res")), language="text")
 
 
 def main():
