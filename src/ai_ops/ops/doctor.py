@@ -9,7 +9,7 @@ import sys
 
 from ai_ops import paths, rules_store
 
-_PKGS = [("yaml", "PyYAML"), ("py_opengauss", "py-opengauss"), ("numpy", "numpy")]
+_PKGS = [("yaml", "PyYAML"), ("py_opengauss", "py-opengauss")]
 
 _MODULES = ["ai_ops.cli", "ai_ops.pipeline", "ai_ops.reporting",
             "ai_ops.engine.parser", "ai_ops.engine.rule_engine",
