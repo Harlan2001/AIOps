@@ -22,6 +22,7 @@ _KEY_ARGS = [
     ("seq_no", "seq_no"),
     ("purpose", "purpose_code"),
     ("flow_code", "flow_code"),
+    ("exch", "exch_code"),
     ("alarm_type", "alarm_type"),
     ("member", "member_id"),
 ]
@@ -63,7 +64,7 @@ def _resolve_records(args):
             key[col] = float(val) if col == "seq_no" else val
     if key:
         src = ER.SOURCES[args.source]
-        key[src.date_col] = args.date
+        key[ER.date_col_of(src, history)] = args.date
         rec = ER.get_record(args.source, key, history=history)
         return [rec] if rec else []
     return ER.list_records(args.source, args.date, history=history)

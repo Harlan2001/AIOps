@@ -23,6 +23,13 @@ _NAME_RE = re.compile(r"(?<!:):([A-Za-z_]\w*)")
 _UNSAFE_RE = re.compile(r"[@:/?#]")
 
 
+class DatabaseUnavailable(Exception):
+    """GaussDB 连接建立失败（主机/端口不可达、认证失败等），区别于 SQL 执行期错误。
+
+    服务/API 据此返回 503 或降级，而不是笼统的 500。
+    """
+
+
 def _dsn(cfg):
     user, pwd = str(cfg["user"]), str(cfg["password"])
     for label, val in (("user", user), ("password", pwd)):
@@ -36,7 +43,14 @@ def _dsn(cfg):
 
 def get_conn():
     cfg = load_config("db", required=True)
-    return py_opengauss.open(_dsn(cfg))
+    try:
+        return py_opengauss.open(_dsn(cfg))
+    except DatabaseUnavailable:
+        raise
+    except Exception as e:
+        # 连接期异常统一归类（不可达/超时/认证失败），便于上层返回 503 而非 500
+        raise DatabaseUnavailable(
+            "无法连接 GaussDB（%s: %s）" % (type(e).__name__, e)) from e
 
 
 def _bind(sql, params):
@@ -49,6 +63,12 @@ def _bind(sql, params):
     idx = {name: i + 1 for i, name in enumerate(names)}
     pg_sql = _NAME_RE.sub(lambda m: "$%d" % idx[m.group(1)], sql)
     values = [(params or {}).get(name) for name in names]
+    null_names = [name for name, val in zip(names, values) if val is None]
+    if null_names:
+        # 显式拦截：缺参不能静默变成 "col = NULL"（永假条件），调用方必须先补齐
+        raise ValueError(
+            "绑定参数缺失/为 None：%s；请先补齐参数再执行（SQL: %s）"
+            % (null_names, sql[:120]))
     return pg_sql, values
 
 
