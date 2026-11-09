@@ -269,7 +269,9 @@ def test_b7_batch_isolated_per_item_error_and_truncation(client, monkeypatch):
     def fake_diagnose(self, rec):
         if rec["key"]["i"] == 2:
             raise RuntimeError("单条炸了")
-        return {"class": "biz", "verdict": "诊断完成", "root": "ok", "action": []}
+        return {"class": "biz", "verdict": "诊断完成", "root": "ok",
+                "action": [], "type": {"id": "fake_t"},
+                "primary_evidence_ok": True}
 
     monkeypatch.setattr(DiagnosticService, "list_records", fake_list)
     monkeypatch.setattr(Engine, "diagnose", fake_diagnose)
@@ -281,7 +283,7 @@ def test_b7_batch_isolated_per_item_error_and_truncation(client, monkeypatch):
     assert body["count"] == MAX_BATCH
     assert body["truncated"] is True
     assert body["results"][2].get("error") == "RuntimeError: 单条炸了"
-    assert body["results"][0]["result"]["root"] == "ok"
+    assert body["results"][0]["result"]["answer"]["root"] == "ok"
 
 
 def test_b7_records_endpoint_limit_capped(client, monkeypatch):
