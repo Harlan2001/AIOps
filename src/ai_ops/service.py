@@ -41,6 +41,10 @@ def build_kb():
     return KnowledgeClient()
 
 
+# 单请求批量取数/诊断的硬上限（B7：杜绝无 LIMIT 全量回放拖垮服务）
+MAX_BATCH = 200
+
+
 class DiagnosticService:
     """诊断服务：取数 → 诊断 → 证据增强；页面 / CLI / API 共用同一服务面。"""
 
@@ -57,9 +61,9 @@ class DiagnosticService:
         """按来源主键取单条错误记录；无结果返回 None。"""
         return ER.get_record(source, key)
 
-    def list_records(self, source, date):
-        """按来源/日期取错误记录列表（仅文本非空）。"""
-        return ER.list_records(source, date)
+    def list_records(self, source, date, limit=None):
+        """按来源/日期取错误记录（仅文本非空）；limit 限制取数条数。"""
+        return ER.list_records(source, date, limit=limit)
 
     def demo_record(self, key):
         """按演示 key 取对应真实错误记录（页①一键演示）。"""
@@ -74,8 +78,23 @@ class DiagnosticService:
         return self.eng.diagnose(rec)
 
     def diagnose_many(self, recs):
-        """批量诊断，返回 [(record, result), ...]。"""
+        """批量诊断，返回 [(record, result), ...]（保持页面/CLI 既有行为）。"""
         return [(r, self.eng.diagnose(r)) for r in recs]
+
+    def diagnose_many_isolated(self, recs):
+        """批量诊断（逐项隔离，B7）：单条异常不拖垮整批，返回 (record, result|error)。
+
+        第二项为引擎结果 dict；当该条诊断抛异常时返回
+        {"_diagnose_error": "<异常类型: 信息>"}，由 API 序列化为逐条 error。
+        """
+        out = []
+        for r in recs:
+            try:
+                out.append((r, self.eng.diagnose(r)))
+            except Exception as e:
+                out.append((r, {"_diagnose_error": "%s: %s" % (
+                    type(e).__name__, str(e)[:200])}))
+        return out
 
     # ---- 证据增强（KB 知识卡）----
 

@@ -13,7 +13,9 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 from ai_ops import reporting
-from ai_ops.service import DiagnosticService
+from ai_ops.engine.db import DatabaseUnavailable
+from ai_ops.engine.error_records import RecordKeyError
+from ai_ops.service import MAX_BATCH, DiagnosticService
 
 # ---------- 请求契约（pydantic） ----------
 
@@ -63,6 +65,15 @@ def get_service(request: Request) -> DiagnosticService:
     return request.app.state.service
 
 
+def _require_source(svc, source):
+    """统一 source 校验（B5）：未知来源一律 404，杜绝 KeyError→500。"""
+    sources = svc.sources()
+    if source not in sources:
+        raise HTTPException(404, "未知错误来源：%s（可选：%s）"
+                            % (source, "、".join(sources)))
+    return sources[source]
+
+
 # ---------- 工具 ----------
 
 
@@ -86,7 +97,17 @@ def _result_summary(res: dict) -> dict:
         "root": res.get("root"),
         "action": res.get("action", []),
         "sql_errors": res.get("sql_errors"),
+        "missing_params": res.get("missing_params"),
+        "primary_evidence_ok": res.get("primary_evidence_ok"),
+        "evidence_complete": res.get("evidence_complete"),
     }
+
+
+def _item_payload(rec, res):
+    """逐条结果：正常给 result 摘要；隔离捕获的异常给 error 字段（B7）。"""
+    if isinstance(res, dict) and res.get("_diagnose_error"):
+        return {"record": _rec_summary(rec), "error": res["_diagnose_error"]}
+    return {"record": _rec_summary(rec), "result": _result_summary(res)}
 
 
 # ---------- 端点 ----------
@@ -114,14 +135,18 @@ def diagnose(req: DiagnoseRequest, request: Request):
 
     if req.record and req.record.source:
         # record 模式：从 GaussDB 错误表取数
-        if req.record.source not in svc.sources():
-            raise HTTPException(404, "未知错误来源：%s（可选：%s）"
-                                % (req.record.source, "、".join(svc.sources())))
-        src = svc.sources()[req.record.source]
+        src = _require_source(svc, req.record.source)
         key = dict(req.record.key or {})
         if req.record.date and src.date_col not in key:
             key[src.date_col] = req.record.date
-        rec = svc.get_record(req.record.source, key)
+        try:
+            rec = svc.get_record(req.record.source, key)
+        except RecordKeyError as e:
+            # 主键不合法：422 并提示所需列（B2）
+            raise HTTPException(422, str(e))
+        except DatabaseUnavailable as e:
+            # 连不上库：503 而非 500（B6）
+            raise HTTPException(503, str(e))
         if rec is None:
             raise HTTPException(404, "记录不存在：%s %s" % (req.record.source, key))
         mode = "record"
@@ -146,32 +171,48 @@ def diagnose(req: DiagnoseRequest, request: Request):
 
 @app.post("/v1/batch-diagnose")
 def batch_diagnose(req: BatchDiagnoseRequest, request: Request):
-    """批量诊断：items 文本列表，或 source+date 每日全量回放。"""
+    """批量诊断：items 文本列表，或 source+date 每日回放（带上限、逐项隔离）。"""
     svc = get_service(request)
+    truncated = False
 
     if req.items:
         recs = [{"text": it.text or "", "ldate": it.ldate,
                  "errcode": it.errcode, "lsection": it.lsection} for it in req.items]
         recs = [r for r in recs if r["text"].strip()]
     elif req.source and req.date:
-        recs = svc.list_records(req.source, req.date)
+        _require_source(svc, req.source)
+        # B7：取数加上限（+1 探测是否截断），连不上库返回 503
+        try:
+            recs = svc.list_records(req.source, req.date, limit=MAX_BATCH + 1)
+        except DatabaseUnavailable as e:
+            raise HTTPException(503, str(e))
+        if len(recs) > MAX_BATCH:
+            recs = recs[:MAX_BATCH]
+            truncated = True
     else:
         raise HTTPException(422, "需提供 items（文本列表）或 source+date（取数回放）")
 
-    pairs = svc.diagnose_many(recs)
+    pairs = svc.diagnose_many_isolated(recs)
     return {
         "count": len(pairs),
-        "results": [{"record": _rec_summary(r), "result": _result_summary(res)}
-                    for r, res in pairs],
+        "truncated": truncated,
+        "max_batch": MAX_BATCH,
+        "results": [_item_payload(r, res) for r, res in pairs],
     }
 
 
 @app.get("/v1/records")
-def records(source: str, date: str, request: Request):
-    """按来源/日期查询错误记录（供前端表格/调度取数）。"""
+def records(source: str, date: str, request: Request, limit: int | None = None):
+    """按来源/日期查询错误记录（供前端表格/调度取数）；limit 有硬上限，默认封顶。"""
     svc = get_service(request)
-    recs = svc.list_records(source, date)
-    return {"count": len(recs), "records": [_rec_summary(r) for r in recs]}
+    _require_source(svc, source)
+    eff_limit = MAX_BATCH if limit is None else max(1, min(limit, MAX_BATCH))
+    try:
+        recs = svc.list_records(source, date, limit=eff_limit)
+    except DatabaseUnavailable as e:
+        raise HTTPException(503, str(e))
+    return {"count": len(recs), "limit": eff_limit,
+            "records": [_rec_summary(r) for r in recs]}
 
 
 @app.get("/v1/rules")
