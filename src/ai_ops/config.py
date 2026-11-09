@@ -24,12 +24,13 @@ _OVERRIDES = {
     "db": {"user": "USER", "password": "PASSWORD", "host": "HOST",
            "port": "PORT", "database": "DATABASE"},
     "llm": {"enabled": "ENABLED", "base_url": "BASE_URL", "api_key": "API_KEY",
-            "model": "MODEL", "timeout": "TIMEOUT"},
+            "model": "MODEL", "timeout": "TIMEOUT",
+            "allow_escalation": "ALLOW_ESCALATION"},
     "kb": {"enabled": "ENABLED", "kb_root": "ROOT", "audience": "AUDIENCE",
            "baseline": "BASELINE", "top": "TOP", "execute_kb_sql": "EXECUTE_SQL"},
 }
 
-_BOOL = {"enabled", "execute_kb_sql"}
+_BOOL = {"enabled", "execute_kb_sql", "allow_escalation"}
 _INT = {"timeout", "top", "port"}
 
 
