@@ -32,7 +32,9 @@ def _biz_nohit():
 
 def _biz_hit():
     return {"class": "biz", "type": {"id": "fund_short", "title": "策略资金不足"},
-            "verdict": "诊断完成", "root": "策略资金不足", "action": ["补资金"]}
+            "verdict": "诊断完成", "root": "策略资金不足", "action": ["补资金"],
+            # B8：真实引擎命中且主检查成功取证时会带这两个标记
+            "primary_evidence_ok": True, "evidence_complete": True}
 
 
 # ---------- pipeline telemetry 各路径 ----------

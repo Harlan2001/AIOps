@@ -44,9 +44,13 @@ def render_hybrid(res):
         L += ev
 
     sql_errs = (rule_res or {}).get("sql_errors") or []
-    if sql_errs:
+    miss_errs = (rule_res or {}).get("missing_params") or []
+    if sql_errs or miss_errs:
         L.append("【降级提示】%d 条取证 SQL 未成功执行，本条结论可能基于不完整证据，请谨慎采信："
-                 % len(sql_errs))
+                 % (len(sql_errs) + len(miss_errs)))
+        for e in miss_errs:
+            L.append("  - step %s：缺少参数 %s，未执行" %
+                     (e.get("step"), "/".join(e.get("missing", []))))
         for e in sql_errs:
             L.append("  - step %s：%s" % (e.get("step"), e.get("error", "")))
 

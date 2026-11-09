@@ -27,6 +27,40 @@ def _loc_str(loc):
     return loc.get("module_label", "")
 
 
+# 主检查无成功取证时的降级置信度（结论仍可参考，但必须显式标注证据不完整）
+LOW_CONFIDENCE = 0.4
+
+
+def _evidence_note(rule_res):
+    """汇总缺参/执行失败的取证步骤，生成显式降级说明（B8：缺证不能再静默给满分）。"""
+    parts = []
+    mp = rule_res.get("missing_params") or []
+    if mp:
+        names = "、".join(
+            "%s（缺 %s）" % (x.get("step"), "/".join(x.get("missing", []))) for x in mp)
+        parts.append("以下取证步骤缺参未执行：%s" % names)
+    se = rule_res.get("sql_errors") or []
+    if se:
+        names = "、".join(
+            "%s（%s）" % (x.get("step"), str(x.get("error", ""))[:60]) for x in se)
+        parts.append("以下取证步骤执行失败：%s" % names)
+    return "；".join(parts)
+
+
+def _rule_answer(rule_res, confidence):
+    """从规则引擎结果构造 answer；证据不完整时附 evidence_note。"""
+    ans = {
+        "root": rule_res.get("root"),
+        "actions": rule_res.get("action", []),
+        "confidence": confidence,
+        "secondary": rule_res.get("secondary", []),
+    }
+    note = _evidence_note(rule_res)
+    if note:
+        ans["evidence_note"] = note
+    return ans
+
+
 def _mk_telemetry(path, llm_called=False, fallback_reason=None, rule_hit=False,
                   cls=None, type_id=None):
     """诊断链观测（3.1 观测基线）：记录本条走了哪条路径、是否调 LLM、兜底原因。"""
@@ -56,7 +90,12 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None, *,
         # 规则引擎：分流（噪音/技术错误/业务/other）+ 类型识别 + 只读 SQL 查库取证
         rule_res = eng.diagnose(rec)
         cls = rule_res.get("class")
-        rule_hit = rule_res.get("verdict") == "诊断完成"
+        # B8：rule_hit 必须有成功取证的主检查；verdict 完成但主检查全缺证/失败仅算降级
+        verdict_done = rule_res.get("verdict") == "诊断完成"
+        primary_ok = bool(rule_res.get("primary_evidence_ok"))
+        rule_hit = verdict_done and primary_ok
+        degraded = verdict_done and not primary_ok
+        confidence = 1.0 if rule_hit else LOW_CONFIDENCE
         type_id = (rule_res.get("type") or {}).get("id")
 
         result = {"text": text, "errcode": errcode, "ldate": ldate,
@@ -75,29 +114,30 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None, *,
         # ② 领域知识层：按归一化中文症状检索 Dimple 知识库（不可用静默降级）
         result["kb_card"] = kbcli.diagnose_card(P.normalize_skeleton(text))
 
-        # ③ 规则命中 → 快速路径（零 token）；否则升级 LLM
-        if rule_hit and not force_llm:
-            result["answer"] = {
-                "root": rule_res.get("root"),
-                "actions": rule_res.get("action", []),
-                "confidence": 1.0,
-                "secondary": rule_res.get("secondary", [])}
-            result["source"] = "规则快速路径（规则查库取证，零 token）"
-            result["telemetry"] = _mk_telemetry("rule_fast", rule_hit=True,
-                                                cls=cls, type_id=type_id)
+        # ③ 规则命中 → 快速路径（零 token）；证据不完整时仍走零 token 但降置信度并标注
+        if (rule_hit or degraded) and not force_llm:
+            result["answer"] = _rule_answer(rule_res, confidence)
+            if rule_hit:
+                result["source"] = "规则快速路径（规则查库取证，零 token）"
+                result["telemetry"] = _mk_telemetry("rule_fast", rule_hit=True,
+                                                    cls=cls, type_id=type_id)
+            else:
+                result["source"] = "规则快速路径（主检查无成功取证，已降置信度，零 token）"
+                result["telemetry"] = _mk_telemetry(
+                    "rule_fast", rule_hit=False,
+                    fallback_reason="insufficient_evidence", cls=cls, type_id=type_id)
             return result
 
         if force_fast:
-            # 强制快速：规则未命中也按规则结果返回
-            result["answer"] = {
-                "root": rule_res.get("root") or rule_res.get("verdict", ""),
-                "actions": rule_res.get("action", []),
-                "confidence": 1.0}
+            # 强制快速：规则未命中也按规则结果返回，置信度同样与证据挂钩
+            result["answer"] = _rule_answer(rule_res, confidence)
+            result["answer"]["root"] = (
+                rule_res.get("root") or rule_res.get("verdict", ""))
             result["source"] = "规则快速路径（force_fast）"
             result["telemetry"] = _mk_telemetry("force_fast", cls=cls)
             return result
 
-        # ④ LLM 兜底（规则未覆盖 / 口语化长尾）
+        # ④ LLM 兜底（规则未覆盖 / 口语化长尾 / 显式要求升级）
         ctx = {
             "ldate": ldate, "errcode": errcode, "location": result["loc"],
             "text": text,
@@ -117,17 +157,13 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None, *,
                 fallback_reason="force_llm" if force_llm else "no_type",
                 rule_hit=rule_hit, cls=cls, type_id=type_id)
             return result
-        # LLM 不可用 → 回退
-        if rule_hit:
-            result["answer"] = {
-                "root": rule_res.get("root"),
-                "actions": rule_res.get("action", []),
-                "confidence": 1.0,
-                "secondary": rule_res.get("secondary", [])}
+        # LLM 不可用 → 回退：有规则结论（含降级）按规则返回，否则通用兜底
+        if rule_hit or degraded:
+            result["answer"] = _rule_answer(rule_res, confidence)
             result["source"] = "规则兜底（LLM 未配置/不可用，已按规则查库）"
             result["telemetry"] = _mk_telemetry(
                 "fallback", llm_called=True, fallback_reason="llm_unavailable",
-                rule_hit=True, cls=cls, type_id=type_id)
+                rule_hit=rule_hit, cls=cls, type_id=type_id)
             return result
         result["answer"] = {
             "root": "未命中确定性规则，且 LLM 未配置；请人工介入或补充规则。",

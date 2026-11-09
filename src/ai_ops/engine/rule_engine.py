@@ -65,18 +65,27 @@ class Engine:
 
     def match_type(self, text, errcode):
         """关键词命中为必要条件（错误码在不同业务场景会被复用，不能单独决定类型）；
-        错误码仅用于关键词命中后的排序。"""
-        best, best_score = None, 0
+        错误码仅用于关键词命中后的排序。
+
+        平分规则（B10 修复）：总分相同时，按"命中的最长关键词"长度决胜——完整短语
+        （如"自成交预警"）优先于其短子串（如"自成交"），避免子串类型把预警类报错
+        误路由到 error 级 runbook；关键词长度仍相同时保留先定义者（确定性）。
+        """
+        best, best_key = None, None
         for t in self.types:
-            kw_hits = sum(1 for kw in t.get("keywords", []) if kw in text)
-            if kw_hits == 0:
+            matched = [kw for kw in t.get("keywords", []) if kw in text]
+            if not matched:
                 continue
+            kw_hits = len(matched)
             score = kw_hits * 10
             if errcode and errcode in t.get("err_codes", []):
                 score += 2
-            if score > best_score:
-                best, best_score = t, score
-        return best, best_score
+            longest = max(len(k) for k in matched)
+            # 比较键：总分 → 命中关键词最长长度（越长越具体）
+            key = (score, longest)
+            if best_key is None or key > best_key:
+                best, best_key = t, key
+        return best, (best_key[0] if best_key else 0)
 
     def _build_params(self, raw, ldate, type_cfg, rb, base=None):
         # 基础：错误记录自带的业务字段（member/client/contract/trader...）
@@ -163,9 +172,11 @@ class Engine:
         # 跑完所有检查，收集全部失败项，再按"主检查优先"综合判定
         failures = []
         sql_errors = []
+        missing_params = []
         for step in rb["steps"]:
             r = self._run_sql(step["sql"], params)
-            ev = {"id": step["id"], "title": step.get("title"), "kind": step["type"], "r": r}
+            ev = {"id": step["id"], "title": step.get("title"), "kind": step["type"],
+                  "primary": bool(step.get("primary")), "r": r}
             res["evidence"].append(ev)
             if step["type"] == "sql_check":
                 if r["status"] == "ok":
@@ -181,8 +192,25 @@ class Engine:
                         })
                 elif r["status"] == "error":
                     sql_errors.append({"step": step.get("id"), "error": r.get("error", "")})
+                elif r["status"] == "missing_params":
+                    # B4：缺参不再静默跳过，显式写入结构化结果，API/报告/调用方可感知
+                    missing_params.append(
+                        {"step": step.get("id"), "missing": r.get("missing", [])})
         if sql_errors:
             res["sql_errors"] = sql_errors
+        if missing_params:
+            res["missing_params"] = missing_params
+
+        # B8：证据可信度标记——主检查是否有成功取证、全部检查是否完整
+        check_evs = [ev for ev in res["evidence"] if ev["kind"] == "sql_check"]
+        primary_evs = [ev for ev in check_evs if ev["primary"]]
+        # 有 primary 标记时以 primary 为准；无 primary 的 runbook 退化为任一 sql_check
+        watch = primary_evs if primary_evs else check_evs
+        primary_ok = any(ev["r"]["status"] == "ok" for ev in watch)
+        evidence_complete = bool(check_evs) and all(
+            ev["r"]["status"] == "ok" for ev in check_evs)
+        res["primary_evidence_ok"] = primary_ok
+        res["evidence_complete"] = evidence_complete
 
         primary = [f for f in failures if f["primary"]]
         if primary:
