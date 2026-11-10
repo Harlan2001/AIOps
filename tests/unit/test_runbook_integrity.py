@@ -168,7 +168,7 @@ def test_engine_warmup_degrades_without_catalog(monkeypatch, tmp_path):
         Engine()
 
 
-# ---------- 6) SQL 绑定参数有来源 ----------
+# ---------- 6) SQL 绑定参数有来源（N9：收紧为动态来源，不再用无条件白名单） ----------
 
 _BIND_RE = re.compile(r"(?<!:):([A-Za-z_]\w*)")
 
@@ -176,22 +176,49 @@ _BIND_RE = re.compile(r"(?<!:):([A-Za-z_]\w*)")
 def test_sql_bind_params_have_source(runbooks):
     types = yaml.safe_load((RULES / "errors.yaml").read_text(encoding="utf-8"))["types"]
     t_by_runbook = {t.get("runbook"): t for t in types}
+
+    # 允许的绑定名全部来自真实来源，动态构造，不硬编码兜底：
+    # ① 默认日期；② 各 runbook extra_params；③ errors.yaml 全部 param_alias 值
+    allowed = {"trade_date", "ldate"}
+    for _rb_id, (_fn, rb) in runbooks.items():
+        allowed.update((rb.get("extra_params") or {}).keys())
+    for t in types:
+        allowed.update((t.get("param_alias") or {}).values())
+
     for rb_id, (fn, rb) in runbooks.items():
-        tcfg = t_by_runbook.get(rb_id, {})
         extra = set((rb.get("extra_params") or {}).keys())
+        tcfg = t_by_runbook.get(rb_id, {})
         alias = set((tcfg.get("param_alias") or {}).values())
         for s in rb["steps"]:
-            for name in _BIND_RE.findall(s.get("sql") or ""):
-                has_src = (
-                    name in ("trade_date", "ldate")      # 默认日期
-                    or name in extra                      # runbook extra_params
-                    or name in alias                      # errors.yaml param_alias
-                    or name in {                            # 常见业务短名
-                        "member", "client", "trader", "contract", "exch",
-                        "variety", "market", "purpose", "bs", "eo", "user",
-                        "flow_code", "oper_name", "alarm_type", "risk_type",
-                        "seq_no", "local_no", "match_no", "trader_no",
-                        "invest_id", "qty", "price", "bs_dir",
-                    }
-                )
+            # 仅统计非注释行内的绑定参数
+            sql_lines = [ln for ln in (s.get("sql") or "").splitlines()
+                         if not ln.strip().startswith("#")]
+            for name in _BIND_RE.findall("\n".join(sql_lines)):
+                has_src = name in allowed or name in extra or name in alias
                 assert has_src, f"{fn} step {s['id']} 参数 :{name} 无明确来源"
+
+
+# ---------- 7) error_records 全部来源表/列在 977 清单内（N9：B1 类问题可被拦） ----------
+
+def test_error_records_sources_exist_in_catalog():
+    from ai_ops.engine import schema_check as SC
+    from ai_ops.engine import error_records as ER
+
+    catalog = SC.load_catalog()
+    assert len(catalog) > 900
+    for sid, src in ER.SOURCES.items():
+        # 历史表：日期列、文本列、主键列、业务列均须在清单内
+        assert src.his in catalog, f"来源 {sid} 历史表 dimple.{src.his} 不在清单"
+        his_cols = catalog[src.his]
+        for col in [src.date_col, src.text_col, *src.key_cols, *src.biz_cols]:
+            assert col in his_cols, f"来源 {sid} 历史表缺列 {col}"
+
+        # 当日表（部分来源无）：校验生效的当日日期列与主键列
+        if not src.today:
+            continue
+        assert src.today in catalog, f"来源 {sid} 当日表 dimple.{src.today} 不在清单"
+        today_cols = catalog[src.today]
+        eff_date = ER.date_col_of(src, history=False)
+        eff_keys = ER.key_cols_of(src, history=False)
+        for col in [eff_date, src.text_col, *eff_keys]:
+            assert col in today_cols, f"来源 {sid} 当日表缺列 {col}"

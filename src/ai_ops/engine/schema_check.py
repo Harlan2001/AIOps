@@ -70,6 +70,12 @@ def sql_tables_and_cols(sql):
                 cols.add(seg)
     for m2 in re.finditer(r"\b([a-z_]\w*)\s*(?:=|>=|<=|<>|!=|>|<)", s, re.I):
         cols.add(m2.group(1))
+    # ORDER BY / GROUP BY 子句中的列（N9：此前不解析，坏列可漏过校验）
+    for clause in re.findall(
+            r"(?:order|group)\s+by\s+(.+?)(?:\blimit\b|$)", s, re.I | re.S):
+        for token in re.findall(r"[A-Za-z_]\w*", clause):
+            # 标识符统一小写（GaussDB 未加引号标识符折叠为小写；DESC/ASC 等关键字亦然）
+            cols.add(token.lower())
     return tables, cols
 
 
