@@ -111,8 +111,8 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None, *,
             result["telemetry"] = _mk_telemetry("noise_ora", cls=cls)
             return result
 
-        # ② 领域知识层：按归一化中文症状检索 Dimple 知识库（不可用静默降级）
-        result["kb_card"] = kbcli.diagnose_card(P.normalize_skeleton(text))
+        # ② 领域知识层延迟到规则快路径之后（N2）：规则命中/噪音/技术错误直接返回，
+        # 不再在快路径前空跑 BM25；仅当确定要走 LLM 兜底时才检索（见下方）。
 
         # ③ 规则命中 → 快速路径（零 token）；证据不完整时仍走零 token 但降置信度并标注
         if (rule_hit or degraded) and not force_llm:
@@ -138,6 +138,8 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None, *,
             return result
 
         # ④ LLM 兜底（规则未覆盖 / 口语化长尾 / 显式要求升级）
+        # 此时才检索 KB（懒加载），供 LLM 上下文使用；不可用静默降级为 None
+        result["kb_card"] = kbcli.diagnose_card(P.normalize_skeleton(text))
         ctx = {
             "ldate": ldate, "errcode": errcode, "location": result["loc"],
             "text": text,
