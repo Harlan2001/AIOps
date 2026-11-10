@@ -145,7 +145,7 @@ def healthz(request: Request):
     svc = get_service(request)
     gauss = svc.check_gauss()
     return {
-        "status": "ok",
+        "status": "ok" if gauss["ok"] else "degraded",
         "service": "ai-ops-api",
         "gauss": {"ok": gauss["ok"], "msg": gauss["msg"]},
         "rules_count": len(svc.eng.types),

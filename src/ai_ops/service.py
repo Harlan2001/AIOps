@@ -16,6 +16,7 @@ D1 方案 C 的两条诊断路径（响应统一为 contract.DiagnosisResult 形
 """
 from datetime import datetime
 from socket import create_connection
+import time
 
 from ai_ops import pipeline
 from ai_ops.config import load_config
@@ -178,9 +179,20 @@ class DiagnosticService:
 
     # ---- 环境预检 ----
 
+    # GaussDB 探测缓存（N4）：避免每次 /healthz 都阻塞 1.5s
+    _GAUSS_TTL = 30.0
+    _GAUSS_CACHE = {"ts": -1.0, "data": None}
+
     @staticmethod
-    def check_gauss(timeout=1.5):
-        """GaussDB TCP 预检（host/port），返回 {ok, msg, checked}。"""
+    def check_gauss(timeout=1.5, force=False):
+        """GaussDB TCP 预检（host/port），返回 {ok, msg, checked}。
+
+        结果按 _GAUSS_TTL 秒缓存；force=True 可强制重探。
+        """
+        now = time.monotonic()
+        if not force and DiagnosticService._GAUSS_CACHE["data"] is not None \
+                and now - DiagnosticService._GAUSS_CACHE["ts"] < DiagnosticService._GAUSS_TTL:
+            return DiagnosticService._GAUSS_CACHE["data"]
         cfg = load_config("db")
         host, port = cfg.get("host"), int(cfg.get("port") or 0)
         try:
@@ -190,4 +202,7 @@ class DiagnosticService:
         except OSError as e:
             ok = False
             msg = "%s:%s 不可达（%s）" % (host, port, type(e).__name__)
-        return {"ok": ok, "msg": msg, "checked": datetime.now().strftime("%H:%M:%S")}
+        data = {"ok": ok, "msg": msg, "checked": datetime.now().strftime("%H:%M:%S")}
+        DiagnosticService._GAUSS_CACHE["ts"] = now
+        DiagnosticService._GAUSS_CACHE["data"] = data
+        return data
