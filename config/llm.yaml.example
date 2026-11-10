@@ -10,3 +10,8 @@ base_url: "https://<你的网关地址>/compatible-mode/v1"
 api_key: "<你的 API Key>"
 model: "qwen3.8-max"      # 以 GET /models 实际列出且本 Key 有权限的模型为准
 timeout: 150
+# D1 方案 C：HTTP 升级允许位（部署级硬熔断）。
+#   false（默认）：/v1/diagnose 传 escalate=true 时直接返回 409，保证数据不出内网；
+#   true：允许显式升级，规则命中仍零 token，仅长尾调 LLM；LLM 运行时不可用则 200 优雅降级。
+# 也可用环境变量 AIOPS_LLM_ALLOW_ESCALATION 覆盖。
+allow_escalation: false
