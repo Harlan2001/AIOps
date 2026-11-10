@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """统一命令行入口（ai-ops）：混合诊断默认，--rule 走纯规则，--llm/--fast 控制决策门。
 
-GaussDB 版取数方式（无 TLOG）：
+GaussDB 版取数方式：
   --source 来源 --date 日期                诊断该来源当日全部错误（回放）
   --source 来源 --date 日期 --trader-no ..  按主键取单条
   --all-sources --date 日期                跨来源诊断当日全部错误
@@ -42,7 +42,7 @@ def _build_parser():
     ap.add_argument("--errcode", type=int, default=0, help="--text 模式下的错误码")
     ap.add_argument("--llm", action="store_true", help="强制走 LLM")
     ap.add_argument("--fast", action="store_true", help="强制规则快速路径（不调 LLM）")
-    ap.add_argument("--rule", action="store_true", help="纯规则模式（不依赖 ML/LLM）")
+    ap.add_argument("--rule", action="store_true", help="纯规则模式（不依赖 LLM）")
     ap.add_argument("--limit", type=int, default=None,
                     help="回放时每个来源最多取 N 条（--all-sources 按来源分别限制）")
     return ap
@@ -104,3 +104,7 @@ def main(argv=None):
     # 观测基线（3.1）：批量回放尾部输出 LLM 降本率与兜底原因分布
     if tele_results and len(records) > 1:
         print("\n" + telemetry.format_summary(telemetry.summarize(tele_results)))
+
+
+if __name__ == "__main__":
+    main()

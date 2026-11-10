@@ -201,13 +201,3 @@ def list_by_date(date, sources=None, history=True, only_text=True, limit=None):
         out.extend(list_records(sid, date, history=history,
                                 only_text=only_text, limit=limit))
     return out
-
-
-def sample_records(source, limit=100000, history=True):
-    """跨日期取样（按日期倒序、文本非空），用于构建相似案例检索索引。"""
-    src = SOURCES[source]
-    sql = "SELECT %s FROM %s WHERE %s IS NOT NULL ORDER BY %s DESC LIMIT %d" % (
-        ", ".join(_all_cols(src, history)), _table(src, history),
-        src.text_col, date_col_of(src, history), int(limit))
-    cols, rows = query(sql)
-    return [_normalize(src, dict(zip(cols, r)), history) for r in rows]
