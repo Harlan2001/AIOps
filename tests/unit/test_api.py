@@ -46,15 +46,32 @@ class FakeLLM:
 UNMATCHED_TEXT = "glorkx zworp vogon 7771"
 
 
-def test_healthz(client):
+def test_healthz(client, monkeypatch):
+    # 打桩 GaussDB 探测，避免依赖真实网络（CI 无法路由内网地址）
+    monkeypatch.setattr(
+        app.state.service, "check_gauss",
+        lambda *a, **k: {"ok": True, "msg": "mock 可达", "checked": "00:00:00"})
     r = client.get("/healthz")
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok"
+    assert body["gauss"]["ok"] is True
     assert body["rules_count"] >= 15
     assert body["noise_keywords"] > 0
-    assert "gauss" in body and "msg" in body["gauss"]
+    assert "msg" in body["gauss"]
     assert "time" in body
+
+
+def test_healthz_degraded_when_gauss_down(client, monkeypatch):
+    # GaussDB 不可达：HTTP 仍 200，顶层 status=degraded（N4）
+    monkeypatch.setattr(
+        app.state.service, "check_gauss",
+        lambda *a, **k: {"ok": False, "msg": "mock 不可达", "checked": "00:00:00"})
+    r = client.get("/healthz")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "degraded"
+    assert body["gauss"]["ok"] is False
 
 
 def test_diagnose_default_rule_only_zero_token(client, svc):
