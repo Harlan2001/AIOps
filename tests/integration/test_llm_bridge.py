@@ -2,8 +2,8 @@
 """集成测试：本地起 OpenAI 兼容 mock 服务，注入 LLMClient 走完整混合管线，
 验证"配好私有化 endpoint 即可调用"——JSON 解析、结论采用、报告渲染全链路。
 
-离线安全：选用未建规则的业务报错，规则引擎在类型匹配阶段即返回，不连 Oracle。
-（需要查库取证的端到端链路在内网环境用 scripts/llm_demo_batch.py 验证。）
+离线安全：选用未建规则的业务报错，规则引擎在类型匹配阶段即返回，不连数据库。
+（需要查库取证的端到端链路在内网环境用集成测试验证。）
 """
 import json
 import threading
@@ -57,6 +57,10 @@ def test_llm_bridge(mock_llm):
     res = pipeline.diagnose(rec, force_llm=True, llm=mock_llm)
     assert res["source"].startswith("LLM"), res["source"]
     assert res["answer"]["root"] == ANSWER["root"]
+    # 观测基线：force_llm 路径应记录为 llm 调用，兜底原因 force_llm
+    assert res["telemetry"]["path"] == "llm"
+    assert res["telemetry"]["llm_called"] is True
+    assert res["telemetry"]["fallback_reason"] == "force_llm"
     report = reporting.render_hybrid(res)
     assert "【最终诊断】来源：LLM" in report
     assert ANSWER["root"] in report

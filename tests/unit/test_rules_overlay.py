@@ -1,14 +1,21 @@
 # -*- coding: utf-8 -*-
 """规则包双层来源与合并语义：包内基线 + AIOPS_RULES_DIR 外挂覆盖。"""
+import pathlib
+
 import pytest
+import yaml
 
 from ai_ops import rules_store
+
+# 基线类型 ID 以包内 errors.yaml 为准（20 类型，随文件演进），
+# 测试不再硬编码旧 3 类型，避免类型扩展时误报回归。
+_PKG = pathlib.Path(rules_store.__file__).parent / "assets" / "rules"
+BASE_TYPE_IDS = [t["id"] for t in yaml.safe_load((_PKG / "errors.yaml").read_text(encoding="utf-8"))["types"]]
 
 
 def test_baseline_registries():
     types, noise = rules_store.load_registries()
-    assert [t["id"] for t in types] == [
-        "settle_price_not_found", "defer_fee_not_found", "position_not_enough"]
+    assert [t["id"] for t in types] == BASE_TYPE_IDS
     assert noise and all(isinstance(k, str) for k in noise)
     rb = rules_store.load_runbook("rb_position")
     assert isinstance(rb, dict) and rb.get("steps")
@@ -36,10 +43,8 @@ def test_overlay_types_same_id_replace_keeps_position_new_appends(tmp_path, monk
 
     types, _ = rules_store.load_registries()
     by_id = {t["id"]: t for t in types}
-    # 同 id 替换且位置不变；基线另外两型不丢；新 id 追加在最后
-    assert [t["id"] for t in types] == [
-        "settle_price_not_found", "defer_fee_not_found",
-        "position_not_enough", "brand_new_type"]
+    # 同 id 替换且位置不变；基线其余类型不丢；新 id 追加在最后
+    assert [t["id"] for t in types] == BASE_TYPE_IDS + ["brand_new_type"]
     assert by_id["settle_price_not_found"]["title"] == "被外挂替换的标题"
 
 

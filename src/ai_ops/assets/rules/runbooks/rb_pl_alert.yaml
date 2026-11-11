@@ -1,0 +1,37 @@
+# 诊断树：盈亏限额报警（alarm 表高频，约 500 万条）
+# 报错形如：交易目的[自营]年累计盈亏超限 / 月累计盈亏超限 / 日累计盈亏超限
+# 业务含义：某交易目的维度下的累计盈亏超过了风控配置的限额，属于信息性报警而非错误。
+# 模板策略：一个模板覆盖"盈亏超限"类全部变体（年/月/日 × 自营/寄售/租赁/全部）。
+id: rb_pl_alert
+title: 盈亏限额报警
+param_value_maps:
+  purpose: {"自营": "ZY", "寄售": "JS", "租赁": "ZL", "全部": "$"}
+  period: {"年": "Y", "月": "M", "日": "D"}
+steps:
+  - id: pl_limit_cfg
+    type: sql_check
+    title: 盈亏限额配置检查
+    primary: true
+    expect: {exists: true}
+    # 原 tc_pl_limit_config 在 GaussDB 清单中不存在，改查通用限额参数表 tc_amout_limit_config；
+    # config_type(字典334) 区分限额类型，盈亏限额对应取值需业务确认
+    sql: "SELECT member_id, contract_id, config_type, alarm_value, limit_value, if_over FROM dimple.tc_amout_limit_config WHERE member_id = :member AND contract_id = :contract"
+    on_fail:
+      root: "未配置限额参数：会员 {member} 合约 {contract} 在限额参数表无记录（系统按默认限额或全局限额拦截）"
+      action:
+        - "在【盈亏限额管理】中为该会员/交易目的配置对应周期的盈亏限额"
+        - "如不需限额监控，关闭该维度的盈亏检查开关"
+
+  - id: pl_accumulated
+    type: sql_query
+    title: 该会员近期报警记录（旁证，看报警频率与内容）
+    # 原 tc_pl_accumulated（累计盈亏统计表）不存在，改用报警历史表作旁证
+    sql: "SELECT alarm_date, alarm_type, member_id, variety_id, market_type, alarm_note FROM dimple.tc_his_alarm_note WHERE member_id = :member ORDER BY alarm_date DESC, seq_no DESC LIMIT 5"
+
+default:
+  root: "盈亏限额报警：会员 {member} 在交易目的 {purpose} 维度下的累计盈亏已达风控限额。需核对实际盈亏金额与限额的差值，确认是否需要调额、止损平仓或人工豁免"
+  action:
+    - "在【盈亏监控】中查看该会员/交易目的的实际累计盈亏与限额"
+    - "如为市场正常波动导致的短期超限，可临时调高限额（需风控审批）"
+    - "如为策略亏损持续扩大，评估是否需要人工止损/减仓"
+    - "如为误报（盈亏计算口径错误），检查盈亏归集逻辑与数据源"

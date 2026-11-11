@@ -1,0 +1,44 @@
+# 诊断树：自成交风险（GaussDB 新增，ftr_err 1,373 条）
+# 报错形如：自成交风险 / 禁止自成交 / 同账户反向委托
+# 业务含义：同一账户/客户同时存在买卖双向委托，可能构成自成交（wash trade），
+#           被风控系统拦截。需要核对同账户在该合约上是否有反向未成交委托或近期反向成交。
+# 数据路径：反向未成交委托查主委托表 tt_ftr_order；近期成交查成交表 tt_ftr_match。
+id: rb_self_trade
+title: 自成交风险
+steps:
+  - id: is_trade_date
+    type: sql_check
+    title: 交易日检查
+    expect: {exists: true}
+    sql: "SELECT trade_date, note FROM dimple.tp_exch_trade_date WHERE trade_date = :trade_date"
+    on_fail:
+      root: "当日（{trade_date}）不在交易日历，或交易日历/节假日尚未配置"
+      action:
+        - "检查交易日历与节假日是否已维护到该日期"
+
+  - id: reverse_pending
+    type: sql_check
+    title: 同账户反向未成交委托检查
+    primary: true
+    expect: {exists: true}
+    # 主委托表 tt_ftr_order（正常委托不落在错误委托表）；status 为委托状态(字典010)，'0' 是否表示未成交需核对字典
+    sql: "SELECT trade_date, trader_no, local_no, contract_id, bs_flag, eo_flag, price, qty, status FROM dimple.tt_ftr_order WHERE trade_date = :trade_date AND member_id = :member AND client_id = :client AND contract_id = :contract AND status = '0'"
+    on_fail:
+      root: "未找到同账户在该合约上的未成交委托记录，系统判断自成交的依据可能来自已成交记录或其他风控规则"
+      action:
+        - "检查同客户/交易员在该合约上是否有未撤销的反向委托"
+        - "核实风控规则中自成交判定的时间窗口与阈值"
+
+  - id: recent_match
+    type: sql_query
+    title: 近期反向成交（旁证，看同账户近期是否有反方向成交）
+    # 成交表 tt_ftr_match（清单估算 0 行，生产环境核对实际数据量）
+    sql: "SELECT trade_date, match_no, contract_id, bs_flag, price, qty FROM dimple.tt_ftr_match WHERE trade_date >= :trade_date AND member_id = :member AND client_id = :client AND contract_id = :contract ORDER BY trade_date DESC, match_no DESC LIMIT 10"
+
+default:
+  root: "自成交风险：客户 {client}（交易员 {trader}）在 {contract} 上的本次委托与同账户已有反向委托/成交形成自成交嫌疑（同一账户既买又卖同一合约），被风控系统拦截"
+  action:
+    - "确认是否存在同账户的其他交易员/策略在同一合约上挂了反向委托——如有，撤掉其中一腿再提交"
+    - "检查是否为不同策略（如套利腿A与腿B）共用同一账户，需分账户或加策略标识隔离"
+    - "若为误判（如做市商豁免），在【自成交豁免】中配置该账户/合约的白名单"
+    - "调整委托方向或改用不同账户提交"

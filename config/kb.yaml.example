@@ -4,7 +4,7 @@
 #   Copy-Item config/kb.yaml.example config/kb.yaml   (PowerShell)
 # 知识库为只读、纯本地 BM25 检索，离线运行，无需网络 / 数据库 / API key / 向量库。
 
-# 总开关：关闭后编排层静默跳过知识检索（不影响 ML / 规则 / LLM 主流程）
+# 总开关：关闭后编排层静默跳过知识检索（不影响规则 / LLM 主流程）
 enabled: true
 
 # 知识包根目录（其下必须含 manifest.json）。

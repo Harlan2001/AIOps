@@ -52,6 +52,39 @@ class LLMClient:
             print("[LLM] 调用失败，将回退规则引擎：%s" % e)
             return None
 
+    @staticmethod
+    def _coerce_answer(parsed):
+        """校验/规整 LLM 返回（N3）：confidence 数值化、actions 列表化、root 字符串化。
+
+        防止 reporting 的 float() 崩溃，以及 actions 为字符串时被逐字符迭代。
+        """
+        if not isinstance(parsed, dict):
+            return {"root": str(parsed), "actions": [], "confidence": 0.0}
+        # confidence：非数字一律 0.0
+        conf = parsed.get("confidence", 0.0)
+        try:
+            conf = float(conf)
+        except (TypeError, ValueError):
+            conf = 0.0
+        # actions：字符串包成单元素列表而非逐字符；仅保留字符串项
+        raw_actions = parsed.get("actions", [])
+        if isinstance(raw_actions, str):
+            actions = [raw_actions] if raw_actions else []
+        elif isinstance(raw_actions, (list, tuple)):
+            actions = [str(a) for a in raw_actions if a is not None]
+        else:
+            actions = []
+        # secondary：非列表降级为空列表
+        secondary = parsed.get("secondary")
+        if not isinstance(secondary, list):
+            secondary = []
+        out = dict(parsed)
+        out["root"] = str(parsed.get("root") or "")
+        out["actions"] = actions
+        out["confidence"] = conf
+        out["secondary"] = secondary
+        return out
+
     def diagnose(self, ctx):
         """返回结构化诊断 dict；不可用/失败返回 None。"""
         raw = self.chat(prompts.build_messages(ctx))
@@ -62,4 +95,4 @@ class LLMClient:
             return {"root": raw, "actions": [], "confidence": 0.0,
                     "need_more_evidence": True, "evidence_note": "LLM 未按 JSON 返回",
                     "_raw": True}
-        return parsed
+        return self._coerce_answer(parsed)

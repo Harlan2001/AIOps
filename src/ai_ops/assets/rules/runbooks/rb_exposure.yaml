@@ -1,0 +1,48 @@
+# 诊断树：敞口不够（GaussDB 新增，真实报错）
+# 报错形如：会员[016815], 交易员[trader], 品种[au], 市场[现货], 交易目的[自营]敞口不够
+# 业务含义：开仓时 已用敞口 + 本次委托 超过该会员/品种/市场/交易目的的敞口额度。
+id: rb_exposure
+title: 敞口不够
+param_value_maps:
+  market: {"现货": "7", "递延": "6", "期货": "0", "全部": "$"}
+  purpose: {"自营": "ZY", "寄售": "JS", "全部": "$"}
+steps:
+  - id: is_trade_date
+    type: sql_check
+    title: 交易日检查
+    expect: {exists: true}
+    sql: "SELECT trade_date, note FROM dimple.tp_exch_trade_date WHERE trade_date = :trade_date"
+    on_fail:
+      root: "当日（{trade_date}）不在交易日历，或交易日历/节假日尚未配置"
+      action:
+        - "检查交易日历与节假日是否已维护到该日期"
+
+  - id: exposure_cfg
+    type: sql_check
+    title: 敞口额度配置检查
+    primary: true
+    expect: {exists: true}
+    sql: "SELECT user_id, member_id, variety_id, market_type, purpose_code, day_exposure, overnight_exposure, frozen_exposure, used_exposure, ifcheck FROM dimple.tc_exposure_check WHERE member_id = :member AND variety_id = :variety AND market_type = :market AND purpose_code = :purpose"
+    on_fail:
+      root: "未配置敞口额度：会员 {member} 品种 {variety} 市场 {market} 交易目的 {purpose} 在额度配置表无记录（未配置额度，或未启用敞口检查）"
+      action:
+        - "在【敞口额度管理】中为该会员/品种/市场/交易目的配置日中、隔夜敞口额度并启用检查"
+        - "若为通配（$）维度报错，检查是否需要补一条通用额度配置"
+        - "配置完成后复核，再重新提交委托"
+
+  - id: exposure_jour
+    type: sql_query
+    title: 敞口额度变动流水（旁证，看最近额度调整）
+    sql: "SELECT trade_date, user_id, member_id, variety_id, market_type, purpose_code, day_ep_chg, on_ep_chg, op_type, status FROM dimple.tc_exposure_jour WHERE member_id = :member AND variety_id = :variety ORDER BY trade_date DESC LIMIT 5"
+
+  - id: exposure_stat
+    type: sql_query
+    title: 实际敞口统计（旁证，当前已用敞口）
+    sql: "SELECT trade_date, trader_no, variety_id, contract_id, buy_weight, sell_weight, accumulate_weight FROM dimple.d_history_exposure_statistics WHERE variety_id = :variety AND trader_no = :trader ORDER BY trade_date DESC LIMIT 5"
+
+default:
+  root: "会员 {member} 品种 {variety} 已配置敞口额度但仍报不够，说明本次委托量超过剩余可用额度（已用敞口 + 本次委托 > 额度）"
+  action:
+    - "核对已用敞口 used_exposure 与本次委托数量，计算剩余可用额度"
+    - "如需放行，在【敞口额度管理】中调高对应日中/隔夜额度并复核"
+    - "或减少本次委托数量、改用其他有额度的交易目的/市场"

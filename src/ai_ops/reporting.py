@@ -24,34 +24,35 @@ def _fmt_evidence(rule_res):
 
 
 def render_hybrid(res):
-    """混合管线 diagnose() 结果 -> CLI 文本报告。"""
-    L = ["=" * W, "【TLOG 智能诊断报告 · ML 分流 + 规则取证 + LLM 大脑】", "=" * W]
+    """诊断管线 diagnose() 结果 -> CLI 文本报告。"""
+    L = ["=" * W, "【智能诊断报告 · 规则分流 + 查库取证 + LLM 大脑】", "=" * W]
     L.append("报错时间 : %s" % res["ldate"])
     L.append("错误码   : %s" % res["errcode"])
     if res["loc"]:
         L.append("报错位置 : %s" % res["loc"])
     L.append("报错文本 : %s" % res["text"][:200])
-    rt = res["rt"]
-    L.append("-" * W)
-    L.append("【ML 分流】路由=%s 置信度=%.3f" % (rt["route"], rt["confidence"]))
-    if rt.get("biz_type"):
-        L.append("    业务类型=%s 类型置信度=%.3f %s"
-                 % (rt["biz_type"], rt.get("biz_conf", 0.0),
-                    "（高置信）" if rt.get("biz_high") else "（低置信→升级 LLM）"))
 
-    cases = res.get("cases", [])
-    if cases:
-        L.append("【ML 相似案例召回】")
-        for c in cases:
-            L.append("  · %.3f | %s 次 | 最近 %s | 码 %s"
-                     % (c["similarity"], c["count"], c["last_date"],
-                        "/".join(c["errcodes"]) or "-"))
-            L.append("           %s" % c["skeleton"][:80])
+    rule_res = res.get("rule_res")
+    if rule_res and rule_res.get("class") in ("noise", "ora"):
+        L.append("-" * W)
+        L.append("【规则分流】判定=%s" % rule_res.get("class"))
+        L.append("    %s" % rule_res.get("verdict"))
 
-    ev = _fmt_evidence(res.get("rule_res"))
+    ev = _fmt_evidence(rule_res)
     if ev:
         L.append("【只读 SQL 查库证据（规则引擎）】")
         L += ev
+
+    sql_errs = (rule_res or {}).get("sql_errors") or []
+    miss_errs = (rule_res or {}).get("missing_params") or []
+    if sql_errs or miss_errs:
+        L.append("【降级提示】%d 条取证 SQL 未成功执行，本条结论可能基于不完整证据，请谨慎采信："
+                 % (len(sql_errs) + len(miss_errs)))
+        for e in miss_errs:
+            L.append("  - step %s：缺少参数 %s，未执行" %
+                     (e.get("step"), "/".join(e.get("missing", []))))
+        for e in sql_errs:
+            L.append("  - step %s：%s" % (e.get("step"), e.get("error", "")))
 
     kb_card = res.get("kb_card")
     if kb_card:
@@ -79,7 +80,7 @@ def render_rule(res):
     """规则引擎 Engine.diagnose() 结果 -> 纯规则文本报告。"""
     L = []
     L.append("=" * 92)
-    L.append("【TLOG 业务报错诊断报告】")
+    L.append("【业务报错智能诊断报告】")
     L.append("=" * 92)
 
     loc = res.get("loc") or {}
@@ -115,12 +116,18 @@ def render_rule(res):
         if r["status"] == "missing_params":
             L.append("  - %s：缺少参数 %s，跳过" % (ev["title"], ",".join(r["missing"])))
             continue
+        if r["status"] == "error":
+            L.append("  - %s：取证失败（%s）" % (ev["title"], r.get("error", "")))
+            continue
         n = len(r["rows"])
         L.append("  - %s：%d 行" % (ev["title"], n))
         if r["rows"]:
             L.append("      列: %s" % " | ".join(r["cols"]))
             for row in r["rows"][:3]:
                 L.append("      %s" % " | ".join(str(x) for x in row))
+
+    for e in res.get("sql_errors", []):
+        L.append("  ⚠ 取证降级：step %s → %s" % (e.get("step"), e.get("error", "")))
 
     L.append("-" * 92)
     L.append("【问题是什么】")

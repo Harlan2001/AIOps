@@ -6,9 +6,9 @@
 - 进程内用 importlib 加载知识库自带的 Knowledge 引擎（纯标准库），不启动额外服务；
 - 任何加载 / 检索异常都静默降级（available()=False、diagnose()=None），绝不阻断主流程；
 - 知识库只读 SQL 默认不自动执行（execute_kb_sql=false），仅作为建议文本与报告展示；
-- 检索键使用中文症状（日志骨架），不使用 TLOG 数字错误码（两套编码体系不一致）。
+- 检索键使用中文症状（日志骨架），不使用数字错误码（两套编码体系不一致）。
 
-接入位置：pipeline 在 ML 判为 biz 后，与"相似案例召回""规则查库"并行检索本层。
+接入位置：pipeline 在规则引擎识别业务报错后，与"规则查库取证"并行检索本层。
 配置优先级：默认值 < config/kb.yaml < AIOPS_KB_* 环境变量 < 显式构造参数。
 """
 import importlib.util
@@ -141,17 +141,38 @@ class KnowledgeClient:
             return None
 
     # ---------------- 裁剪为诊断可用结构 ----------------
+    @staticmethod
+    def _safe_score(value):
+        """畸形 score（非数字）回退 0.0，不再抛 ValueError 崩规则路径。"""
+        try:
+            return round(float(value), 2)
+        except (TypeError, ValueError):
+            return 0.0
+
     def simplify(self, raw, max_matches=3, max_branches=4,
                  max_queries=3, max_logs=3, max_sources=2):
-        """把知识库原始结果裁剪为结构化"知识卡"（控制提示词体积）。"""
-        if not raw or not raw.get("matches"):
+        """把知识库原始结果裁剪为结构化"知识卡"（控制提示词体积）。
+
+        对畸形返回做防御：raw 非 dict、matches 非 list 或元素非 dict 时安全降级，
+        不抛异常（N2）。
+        """
+        if not isinstance(raw, dict):
+            return None
+        matches = raw.get("matches")
+        if not isinstance(matches, list) or not matches:
             return None
         cards = []
-        for m in raw["matches"][:max_matches]:
+        for m in matches[:max_matches]:
+            if not isinstance(m, dict):
+                continue
             branches = []
             for b in (m.get("branches") or [])[:max_branches]:
+                if not isinstance(b, dict):
+                    continue
                 acts = []
                 for a in (b.get("actions") or []):
+                    if not isinstance(a, dict):
+                        continue
                     acts.append({
                         "title": a.get("title", ""),
                         "allowed_when": a.get("allowed_when", []) or [],
@@ -169,6 +190,8 @@ class KnowledgeClient:
                 })
             queries = []
             for q in (m.get("readonly_queries") or [])[:max_queries]:
+                if not isinstance(q, dict):
+                    continue
                 queries.append({
                     "purpose": q.get("purpose", ""),
                     "table": q.get("table", ""),
@@ -180,6 +203,8 @@ class KnowledgeClient:
                 })
             logs = []
             for lg in (m.get("log_context") or [])[:max_logs]:
+                if not isinstance(lg, dict):
+                    continue
                 logs.append({
                     "caption": lg.get("caption", ""),
                     "level": lg.get("level", ""),
@@ -189,6 +214,8 @@ class KnowledgeClient:
                 })
             sources = []
             for s in (m.get("sources") or [])[:max_sources]:
+                if not isinstance(s, dict):
+                    continue
                 sources.append({
                     "repository": s.get("repository", ""),
                     "path": s.get("path", ""),
@@ -196,7 +223,7 @@ class KnowledgeClient:
                     "revision": s.get("revision") or s.get("operative_revision") or "",
                 })
             cards.append({
-                "score": round(float(m.get("score", 0.0)), 2),
+                "score": self._safe_score(m.get("score", 0.0)),
                 "document_id": m.get("document_id", ""),
                 "title": m.get("title", ""),
                 "symptom": m.get("symptom", ""),
@@ -210,6 +237,8 @@ class KnowledgeClient:
                 "n_logs": len(m.get("log_context") or []),
                 "sources": sources,
             })
+        if not cards:
+            return None
         return {
             "knowledge_version": raw.get("knowledge_version", ""),
             "baseline_id": raw.get("baseline_id", ""),

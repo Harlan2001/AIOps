@@ -1,0 +1,33 @@
+# DIMPLE AIOps 诊断服务编排（私有化单机起步）
+#
+# 用法：
+#   1. cp .env.example .env  并填写密钥（数据库口令 / LLM Key）
+#   2. docker compose up -d --build
+#   3. 验证：curl http://127.0.0.1:8000/healthz
+#
+# 多环境 profile：同一镜像 + 不同 .env 注入即可切换 dev/test/prod，
+# 配置优先级 = 环境变量（本文件注入）> 挂载的 config/*.yaml > 内置 example。
+services:
+  aiops:
+    build: .
+    image: aiops:0.1.0
+    container_name: aiops-diagnose
+    ports:
+      - "8000:8000"
+    environment:
+      # GaussDB 只读连接（密钥来自 .env，不入库、不进镜像）
+      AIOPS_DB_HOST: ${AIOPS_DB_HOST:-db}
+      AIOPS_DB_PORT: ${AIOPS_DB_PORT:-5432}
+      AIOPS_DB_DATABASE: ${AIOPS_DB_DATABASE:-dimple}
+      AIOPS_DB_USER: ${AIOPS_DB_USER}
+      AIOPS_DB_PASSWORD: ${AIOPS_DB_PASSWORD}
+      # LLM 兜底（可选；不配置则自动降级为纯规则路径）
+      AIOPS_LLM_ENABLED: ${AIOPS_LLM_ENABLED:-false}
+      AIOPS_LLM_BASE_URL: ${AIOPS_LLM_BASE_URL:-}
+      AIOPS_LLM_API_KEY: ${AIOPS_LLM_API_KEY:-}
+      AIOPS_LLM_MODEL: ${AIOPS_LLM_MODEL:-}
+    volumes:
+      # 真实配置（含密钥）只挂载，不打进镜像
+      - ./config:/app/config:ro
+      - ./var/reports:/app/reports
+    restart: unless-stopped

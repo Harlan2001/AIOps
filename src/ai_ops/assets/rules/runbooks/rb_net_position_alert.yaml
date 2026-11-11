@@ -1,0 +1,32 @@
+# 诊断树：净头寸/待平盘超额报警（quote_alarm 约 21 万条）
+# 报错形如：美元净头寸超额 / 贵金属净头寸超额 / 待平盘量超额
+# 业务含义：做市商/会员在某个品种上的净头寸或待平盘量超过了交易所或风控规定的限额。
+id: rb_net_position_alert
+title: 净头寸/待平盘超额报警
+steps:
+  - id: net_posi_limit
+    type: sql_check
+    title: 净头寸限额配置检查
+    primary: true
+    expect: {exists: true}
+    # 原 tc_net_position_limit 在 GaussDB 清单中不存在，改查通用限额参数表 tc_amout_limit_config
+    sql: "SELECT member_id, contract_id, config_type, alarm_value, limit_value, if_over FROM dimple.tc_amout_limit_config WHERE member_id = :member AND contract_id = :contract"
+    on_fail:
+      root: "未配置净头寸限额：会员 {member} 合约 {contract} 在限额参数表无记录（系统按默认限额拦截，或该品种未启用净头寸监控）"
+      action:
+        - "在【净头寸限额管理】中为该会员/合约配置净头寸限额和待平盘量限额"
+        - "如不需监控，关闭该合约的净头寸检查开关"
+
+  - id: current_net_posi
+    type: sql_query
+    title: 当前净头寸（旁证，按客户结算持仓聚合）
+    # 原 tc_net_position_stat 不存在，改由期货客户结算持仓表 tc_ftr_client_posi_clear 聚合净头寸
+    sql: "SELECT clear_date, member_id, contract_id, SUM(buy_qty) AS buy_qty, SUM(sell_qty) AS sell_qty, SUM(buy_qty - sell_qty) AS net_qty FROM dimple.tc_ftr_client_posi_clear WHERE clear_date = :trade_date AND member_id = :member AND contract_id = :contract GROUP BY clear_date, member_id, contract_id"
+
+default:
+  root: "净头寸/待平盘超额报警：会员 {member} 合约 {contract} 的净头寸或待平盘量已超过限额。可能原因：单边持仓集中度过高、做市对冲不及时、或限额设置过低"
+  action:
+    - "在【净头寸监控】中核对实际净头寸/待平盘量与限额的差值"
+    - "如为临时性超限（大单成交后待对冲），可设定合理的对冲时限后自动恢复"
+    - "如需调高限额，在【净头寸限额管理】中修改（需风控审批）"
+    - "如为做市商正常业务，可通过反向对冲或移仓降低净头寸"
