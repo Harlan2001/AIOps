@@ -18,6 +18,29 @@ const kbCards = computed(() => props.result.kb_card?.cards ?? [])
 function evidenceColumns(cols?: string[]) {
   return (cols ?? []).map((c) => ({ title: c, dataIndex: c, key: c }))
 }
+
+// 证据行无唯一业务字段，用行下标生成稳定且不重复的 key。
+function evidenceRowKey(
+  _record: Record<string, unknown>,
+  idx: number,
+): string {
+  return String(idx)
+}
+
+// 后端 rows 是按 cols 顺序对齐的数组，Ant Table 需要对象，按列名映射为键值对象。
+function evidenceRows(
+  cols?: string[],
+  rows?: unknown[][],
+): Array<Record<string, unknown>> {
+  const c = cols ?? []
+  return (rows ?? []).map((row) => {
+    const obj: Record<string, unknown> = {}
+    c.forEach((col, i) => {
+      obj[col] = row[i]
+    })
+    return obj
+  })
+}
 </script>
 
 <template>
@@ -88,9 +111,9 @@ function evidenceColumns(cols?: string[]) {
           <a-table
             size="small"
             :columns="evidenceColumns(ev.r?.cols)"
-            :data-source="ev.r?.rows ?? []"
+            :data-source="evidenceRows(ev.r?.cols, ev.r?.rows)"
             :pagination="false"
-            row-key="(_record, idx) => String(idx)"
+            :row-key="evidenceRowKey"
           />
         </template>
       </a-collapse-panel>

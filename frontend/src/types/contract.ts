@@ -14,7 +14,7 @@ export interface EvidenceRow {
     status?: string
     missing?: string[]
     error?: string
-    rows?: Array<Record<string, unknown>>
+    rows?: unknown[][]
     cols?: string[]
   }
 }

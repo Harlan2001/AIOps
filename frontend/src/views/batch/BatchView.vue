@@ -5,6 +5,7 @@ import { batchReplay } from '@/api/diagnose'
 import { ApiError } from '@/api/client'
 import ResultCard from '@/components/ResultCard.vue'
 import { SOURCES } from '@/constants/sources'
+import { classifyBatchItem, type BatchStatus } from '@/utils/batchStatus'
 import type { BatchItem, DiagnosisResult } from '@/types/contract'
 
 const source = ref(SOURCES[0].id)
@@ -23,7 +24,7 @@ interface Row {
   cls: string
   type: string
   confidence: number | string
-  degraded: boolean
+  status: BatchStatus
   item: BatchItem
 }
 
@@ -37,9 +38,7 @@ const rows = computed<Row[]>(() => {
       cls: res?.rule_res?.class ?? '-',
       type: res?.rule_res?.type?.title ?? (item.error ? '诊断异常' : '未识别'),
       confidence: res?.answer?.confidence ?? '-',
-      degraded:
-        (res?.rule_res?.missing_params?.length ?? 0) > 0 ||
-        (res?.rule_res?.sql_errors?.length ?? 0) > 0,
+      status: classifyBatchItem(item),
       item,
     })
   })
@@ -64,7 +63,7 @@ const columns = [
   { title: '分类', dataIndex: 'cls', key: 'cls' },
   { title: '问题类型', dataIndex: 'type', key: 'type' },
   { title: '置信度', dataIndex: 'confidence', key: 'confidence', width: 90 },
-  { title: '降级', dataIndex: 'degraded', key: 'degraded', width: 80 },
+  { title: '状态', dataIndex: 'status', key: 'status', width: 90 },
 ]
 
 const drawerVisible = ref(false)
@@ -79,6 +78,8 @@ async function run() {
   loading.value = true
   errorMsg.value = ''
   items.value = []
+  // 新请求开始即重置截断标志，避免上一批的 truncated 污染加载中/失败时的空列表。
+  truncated.value = false
   try {
     const res = await batchReplay(source.value, date.value)
     items.value = res.results
@@ -160,10 +161,12 @@ async function run() {
       :custom-row="(record: Row) => ({ onClick: () => openDetail(record) })"
     >
       <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'degraded'">
-          <a-tag :color="record.degraded ? 'orange' : 'green'">
-            {{ record.degraded ? '是' : '否' }}
+        <template v-if="column.key === 'status'">
+          <a-tag v-if="record.status === 'error'" color="red">异常</a-tag>
+          <a-tag v-else-if="record.status === 'degraded'" color="orange">
+            降级
           </a-tag>
+          <a-tag v-else color="green">正常</a-tag>
         </template>
       </template>
     </a-table>

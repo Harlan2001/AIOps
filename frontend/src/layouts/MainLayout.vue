@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   DashboardOutlined,
@@ -15,6 +15,21 @@ const health = useHealthStore()
 
 const selectedKeys = computed(() => [route.name as string])
 
+// 四态映射：加载中 / 正常 / 降级 / 请求失败（未知），避免加载失败时仍显示绿色。
+const badgeStatus = computed<
+  'processing' | 'success' | 'warning' | 'error'
+>(() => {
+  if (health.loading) return 'processing'
+  if (health.error || !health.data) return 'error'
+  return health.isDegraded ? 'warning' : 'success'
+})
+
+const badgeText = computed(() => {
+  if (health.loading) return '检测中…'
+  if (health.error || !health.data) return '健康检查失败'
+  return health.isDegraded ? '服务降级' : '服务正常'
+})
+
 const menuItems = [
   { key: 'diagnose', icon: MedicineBoxOutlined, label: '单条诊断' },
   { key: 'batch', icon: TableOutlined, label: '批量回放' },
@@ -25,8 +40,31 @@ function onMenuClick({ key }: { key: string }) {
   router.push({ name: key })
 }
 
+// 健康状态轮询间隔：SPA 长时间打开时也能反映数据库/网络的故障与恢复。
+const POLL_INTERVAL = 30000
+let timer: ReturnType<typeof setInterval> | null = null
+
 onMounted(() => {
   health.refresh()
+  timer = setInterval(() => {
+    health.refresh()
+  }, POLL_INTERVAL)
+})
+
+// 路由切换时立即刷新一次，避免展示旧状态。
+watch(
+  () => route.name,
+  () => {
+    health.refresh()
+  },
+)
+
+// 组件卸载时清理定时器，防止内存泄漏与卸载后更新。
+onBeforeUnmount(() => {
+  if (timer !== null) {
+    clearInterval(timer)
+    timer = null
+  }
 })
 </script>
 
@@ -50,10 +88,7 @@ onMounted(() => {
     <a-layout>
       <a-header class="app-header">
         <span class="page-title">{{ route.meta.title }}</span>
-        <a-badge
-          :status="health.isDegraded ? 'warning' : 'success'"
-          :text="health.isDegraded ? '服务降级' : '服务正常'"
-        />
+        <a-badge :status="badgeStatus" :text="badgeText" />
       </a-header>
       <a-content class="app-content">
         <router-view />

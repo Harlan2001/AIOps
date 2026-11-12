@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 import { diagnose } from '@/api/diagnose'
 import { ApiError } from '@/api/client'
 import ResultCard from '@/components/ResultCard.vue'
 import { SOURCES } from '@/constants/sources'
+import { SOURCE_KEYS } from '@/constants/sourceKeys'
 import type { DiagnosisResult } from '@/types/contract'
 
 const mode = ref<'text' | 'record'>('text')
@@ -18,6 +19,12 @@ const loading = ref(false)
 const errorMsg = ref('')
 const result = ref<DiagnosisResult | null>(null)
 
+const keyMeta = computed(() => SOURCE_KEYS[source.value])
+
+function fillSample() {
+  keyText.value = JSON.stringify(keyMeta.value.sample, null, 2)
+}
+
 async function run() {
   loading.value = true
   errorMsg.value = ''
@@ -30,7 +37,25 @@ async function run() {
         escalate: escalate.value,
       })
     } else {
-      const key = keyText.value ? JSON.parse(keyText.value) : {}
+      let key: Record<string, unknown>
+      try {
+        key = keyText.value ? JSON.parse(keyText.value) : {}
+      } catch {
+        errorMsg.value = '主键 JSON 格式错误，请检查后重试'
+        loading.value = false
+        return
+      }
+      // 前端按所选来源校验必填主键，避免留空/缺字段被后端 422 拒绝
+      const missing = keyMeta.value.requiredKeys.filter(
+        (k) => key[k] === undefined || key[k] === null || key[k] === '',
+      )
+      if (missing.length) {
+        errorMsg.value = `来源 ${source.value} 缺少必需主键：${missing.join(
+          '、',
+        )}（日期列 ${keyMeta.value.dateCol} 已由业务日期自动补全）`
+        loading.value = false
+        return
+      }
       result.value = await diagnose({
         record: { source: source.value, date: date.value, key },
         escalate: escalate.value,
@@ -43,7 +68,7 @@ async function run() {
           ? `升级被拒绝（409）：${e.message}`
           : `请求失败（${e.status}）：${e.message}`
     } else {
-      errorMsg.value = '主键 JSON 格式错误或请求异常，请检查输入'
+      errorMsg.value = '请求异常，请检查输入'
     }
   } finally {
     loading.value = false
@@ -89,12 +114,18 @@ async function run() {
             </a-form-item>
           </a-col>
         </a-row>
-        <a-form-item label="主键 JSON（可选，留空按日期/默认条件）">
-          <a-textarea
-            v-model:value="keyText"
-            :rows="2"
-            placeholder='{"trader_no":"trader","local_no":"000001"}'
-          />
+        <a-form-item>
+          <template #label>
+            主键 JSON（必填：{{ keyMeta.requiredKeys.join('、') }}）
+            <a-button type="link" size="small" @click="fillSample">
+              填充示例
+            </a-button>
+          </template>
+          <a-textarea v-model:value="keyText" :rows="3" />
+          <p class="hint">
+            日期列 {{ keyMeta.dateCol }} 由上方业务日期自动补全，无需写入；
+            该来源完整主键为 {{ keyMeta.dateCol }}、{{ keyMeta.requiredKeys.join('、') }}。
+          </p>
         </a-form-item>
       </template>
 
@@ -129,5 +160,11 @@ async function run() {
 
 .result-block {
   margin-top: 24px;
+}
+
+.hint {
+  margin-top: 4px;
+  color: #888;
+  font-size: 12px;
 }
 </style>
