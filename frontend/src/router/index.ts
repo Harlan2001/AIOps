@@ -22,6 +22,12 @@ const router = createRouter({
       component: () => import('@/views/dashboard/DashboardView.vue'),
       meta: { title: '管理看板' },
     },
+    {
+      path: '/history',
+      name: 'history',
+      component: () => import('@/views/history/HistoryView.vue'),
+      meta: { title: '历史诊断' },
+    },
   ],
 })
 

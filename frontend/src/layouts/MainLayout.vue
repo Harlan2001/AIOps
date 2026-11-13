@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   DashboardOutlined,
+  HistoryOutlined,
   MedicineBoxOutlined,
   TableOutlined,
 } from '@ant-design/icons-vue'
@@ -14,6 +15,7 @@ const router = useRouter()
 const health = useHealthStore()
 
 const selectedKeys = computed(() => [route.name as string])
+const collapsed = ref(false)
 
 // 四态映射：加载中 / 正常 / 降级 / 请求失败（未知），避免加载失败时仍显示绿色。
 const badgeStatus = computed<
@@ -34,6 +36,7 @@ const menuItems = [
   { key: 'diagnose', icon: MedicineBoxOutlined, label: '单条诊断' },
   { key: 'batch', icon: TableOutlined, label: '批量回放' },
   { key: 'dashboard', icon: DashboardOutlined, label: '管理看板' },
+  { key: 'history', icon: HistoryOutlined, label: '历史诊断' },
 ]
 
 function onMenuClick({ key }: { key: string }) {
@@ -70,8 +73,18 @@ onBeforeUnmount(() => {
 
 <template>
   <a-layout class="app-layout">
-    <a-sider breakpoint="lg" collapsible>
-      <div class="logo">DIMPLE AIOps</div>
+    <a-sider
+      v-model:collapsed="collapsed"
+      breakpoint="lg"
+      class="app-sider"
+    >
+      <div class="logo" :class="{ 'logo-collapsed': collapsed }">
+        <div class="logo-mark">AI</div>
+        <div class="logo-text">
+          <span class="logo-title">DIMPLE AIOps</span>
+          <span class="logo-sub">智能诊断工作台</span>
+        </div>
+      </div>
       <a-menu
         theme="dark"
         mode="inline"
@@ -102,15 +115,60 @@ onBeforeUnmount(() => {
   min-height: 100vh;
 }
 
+.app-sider {
+  background: linear-gradient(180deg, #0f2f5c 0%, #0b213f 100%);
+}
+
 .logo {
-  height: 48px;
   margin: 16px;
-  color: #fff;
-  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.logo-mark {
+  width: 36px;
+  height: 36px;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  letter-spacing: 1px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1677ff, #38a3ff);
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.logo-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.logo-title {
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+}
+
+.logo-sub {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.logo-collapsed {
+  justify-content: center;
+  padding: 8px;
+}
+
+.logo-collapsed .logo-text {
+  display: none;
 }
 
 .app-header {
@@ -119,11 +177,13 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  box-shadow: 0 1px 0 rgba(15, 47, 92, 0.08);
 }
 
 .page-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
+  color: #1f2d3d;
 }
 
 .app-content {
