@@ -17,7 +17,9 @@ from pydantic import BaseModel
 from ai_ops import reporting
 from ai_ops.engine.db import DatabaseUnavailable
 from ai_ops.engine.error_records import RecordKeyError
+from ai_ops.scheduler import runner as scheduler_runner
 from ai_ops.service import MAX_BATCH, DiagnosticService
+from ai_ops.store import diag_repo
 
 # ---------- 请求契约（pydantic） ----------
 
@@ -93,8 +95,14 @@ class BatchResponseModel(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.service = DiagnosticService()
+    service = DiagnosticService()
+    app.state.service = service
+    # 方案 A：仅在 schedule.enabled=true 时创建并启动进程内巡检，默认 None 不启动。
+    scheduler = scheduler_runner.build_scheduler(service)
+    scheduler_runner.start_scheduler(scheduler)
+    app.state.scheduler = scheduler
     yield
+    scheduler_runner.shutdown_scheduler(scheduler)
 
 
 app = FastAPI(
@@ -268,3 +276,88 @@ def rules(request: Request):
         "rules": items,
         "coverage": "覆盖率由 scripts/coverage_scan.py 离线扫描（口径：7 张历史表全量条数为分母、TOP200 骨架命中为分子）",
     }
+
+
+# ---------- M2：历史诊断与统计（只读持久化表） ----------
+
+
+def _store_unavailable(e):
+    """存储未就绪（表未建/库不可达）统一转 503，不抛 500。"""
+    raise HTTPException(
+        503, "诊断结果存储未就绪（请先执行 scripts/init_diag_log.sql 并开启 store）：%s"
+        % (type(e).__name__))
+
+
+@app.get("/v1/diagnoses/stats")
+def diagnosis_stats(request: Request, start_date: str | None = None,
+                    end_date: str | None = None, top_n: int = 10):
+    """聚合统计：按日趋势、高频类型 TOP、分类分布、升级/异常率、标注量。"""
+    try:
+        return diag_repo.stats(
+            start_date=start_date, end_date=end_date,
+            top_n=max(1, min(top_n, 50)))
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        _store_unavailable(e)
+
+
+@app.get("/v1/diagnoses")
+def diagnosis_list(request: Request, source: str | None = None,
+                   diag_class: str | None = None, diag_type: str | None = None,
+                   annot_status: str | None = None,
+                   start_date: str | None = None, end_date: str | None = None,
+                   offset: int = 0, limit: int = 50):
+    """分页查询历史诊断（支持来源/类型/分类/标注/日期筛选）。"""
+    try:
+        return diag_repo.list_logs(
+            source=source, diag_class=diag_class, diag_type=diag_type,
+            annot_status=annot_status, start_date=start_date,
+            end_date=end_date, offset=max(0, offset),
+            limit=max(1, min(limit, 200)))
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        _store_unavailable(e)
+
+
+@app.get("/v1/diagnoses/{log_id}")
+def diagnosis_detail(log_id: int, request: Request):
+    """单条历史诊断详情（含完整结果快照）。"""
+    try:
+        row = diag_repo.get_log(log_id)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        _store_unavailable(e)
+    if row is None:
+        raise HTTPException(404, "诊断记录不存在：%s" % log_id)
+    return row
+
+
+class AnnotationRequest(BaseModel):
+    """人工纠错入参：标注结论 + 正确答案 + 标注人（留痕）。"""
+    annot_status: str                       # correct / wrong
+    correct_answer: str | None = None
+    annotator: str
+
+
+@app.post("/v1/diagnoses/{log_id}/annotation")
+def annotate_diagnosis(log_id: int, req: AnnotationRequest, request: Request):
+    """人工确认/纠错：写回标注字段并记录标注人与时间。"""
+    if req.annot_status not in ("correct", "wrong"):
+        raise HTTPException(422, "annot_status 仅支持 correct / wrong")
+    if not req.annotator.strip():
+        raise HTTPException(422, "annotator 不能为空（需标注人留痕）")
+    try:
+        if diag_repo.get_log(log_id) is None:
+            raise HTTPException(404, "诊断记录不存在：%s" % log_id)
+        diag_repo.update_annotation(
+            log_id, req.annot_status,
+            req.correct_answer, req.annotator.strip())
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        _store_unavailable(e)
+    return {"id": log_id, "annot_status": req.annot_status,
+            "annotator": req.annotator.strip(), "status": "updated"}

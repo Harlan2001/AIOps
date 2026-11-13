@@ -14,7 +14,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # P1 服务化才安装（FastAPI 薄封装内核；未装 api extra 时 HTTP 相关模块不可用）
-api = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "pydantic>=2"]
+api = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "pydantic>=2", "apscheduler>=3.10"]
 # P1 演示前端（Streamlit；pandas 为 demo 直接 import，显式声明不靠传递依赖）
 demo = ["streamlit>=1.30", "pandas>=2"]
 
