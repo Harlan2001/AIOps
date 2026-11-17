@@ -13,11 +13,14 @@ class FakeService:
     def sources(self):
         return {"ftr_err": "期货错误委托"}
 
-    def list_records(self, source, date, limit=None):
-        self.calls.append(("list", source, date, limit))
+    def list_records(self, source, date, history=True, limit=None, offset=0):
+        self.calls.append(("list", source, date, limit, history, offset))
         if self.raise_on and date == self.raise_on:
             raise RuntimeError("db unavailable")
         return [{"text": "a", "ldate": date}, {"text": "b", "ldate": date}]
+
+    def count_records(self, source, date, history=True):
+        return 2
 
     def diagnose_many_isolated(self, recs, escalate_flags=None, _ctx=None):
         self.calls.append(("diag", len(recs), _ctx))
@@ -60,7 +63,11 @@ def test_inspection_isolates_source_error(monkeypatch):
     fake = FakeService(raise_on=_ENABLED_dates(monkeypatch))
     summary = run(svc=fake)
     assert summary["scanned"] == 0
-    assert summary["by_source"]["ftr_err"]["errors"] == 1
+    # 取数失败计入 fetch_errors，不与诊断失败混淆，diagnosed 不会为负
+    assert summary["fetch_errors"] == 1
+    assert summary["errors"] == 0
+    assert summary["diagnosed"] == 0
+    assert summary["by_source"]["ftr_err"]["fetch_errors"] == 1
 
 
 def _ENABLED_dates(monkeypatch):
@@ -76,6 +83,65 @@ def test_inspection_skips_when_locked(monkeypatch):
         assert run(svc=FakeService())["status"] == "skipped"
     finally:
         inspector._RUN_LOCK.release()
+
+
+class PagedService:
+    """模拟分页：按 offset 返回 batch_size 条，超过总数返回空。"""
+
+    def __init__(self, total):
+        self.total = total
+        self.history_seen = []
+
+    def sources(self):
+        return {"ftr_err": "期货错误委托"}
+
+    def list_records(self, source, date, history=True, limit=None, offset=0):
+        self.history_seen.append(history)
+        remain = self.total - offset
+        if remain <= 0:
+            return []
+        n = min(limit, remain)
+        return [{"text": "r%d" % (offset + i), "ldate": date}
+                for i in range(n)]
+
+    def count_records(self, source, date, history=True):
+        return self.total
+
+    def diagnose_many_isolated(self, recs, escalate_flags=None, _ctx=None):
+        return [(r, {"rule_res": {}, "answer": {}}) for r in recs]
+
+
+def test_today_uses_today_table_and_paginates(monkeypatch):
+    from datetime import datetime
+    cfg = dict(_ENABLED, batch_size=2, max_scan_per_source=5000)
+    monkeypatch.setattr(inspector, "load_schedule", lambda: cfg)
+    fake = PagedService(total=5)
+    summary = inspector.run_inspection(svc=fake)
+    # 当天日期 history=False，且分 3 页读全（2+2+1）
+    assert set(fake.history_seen) == {False}
+    assert summary["scanned"] == 5
+    assert summary["truncated"] is False
+    assert summary["unscanned"] == 0
+
+
+def test_pagination_truncated_reports_unscanned(monkeypatch):
+    cfg = dict(_ENABLED, batch_size=2, max_scan_per_source=4)
+    monkeypatch.setattr(inspector, "load_schedule", lambda: cfg)
+    fake = PagedService(total=10)
+    summary = inspector.run_inspection(svc=fake)
+    assert summary["truncated"] is True
+    assert summary["scanned"] == 4
+    assert summary["unscanned"] == 6
+
+
+def test_init_error_releases_lock(monkeypatch):
+    # batch_size 非法导致初始化抛错，锁仍须释放，后续巡检不会永久 skipped
+    cfg = dict(_ENABLED, batch_size="abc")
+    monkeypatch.setattr(inspector, "load_schedule", lambda: cfg)
+    with pytest.raises(ValueError):
+        inspector.run_inspection(svc=FakeService())
+    assert inspector._RUN_LOCK.acquire(blocking=False)
+    inspector._RUN_LOCK.release()
 
 
 def test_build_scheduler_none_when_disabled(monkeypatch):

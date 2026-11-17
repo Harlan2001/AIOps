@@ -225,6 +225,11 @@ def batch_diagnose(req: BatchDiagnoseRequest, request: Request):
         keep = [i for i, r in enumerate(recs) if r["text"].strip()]
         recs = [recs[i] for i in keep]
         flags = [flags[i] for i in keep]
+        # 与 source+date 路径一致的硬上限，防止超大 items 长期占用 worker
+        if len(recs) > MAX_BATCH:
+            recs = recs[:MAX_BATCH]
+            flags = flags[:MAX_BATCH]
+            truncated = True
     elif req.source and req.date:
         _require_source(svc, req.source)
         # 整表回放：纯规则、不做 LLM 扇出；取数带上限（+1 探测截断）

@@ -60,23 +60,28 @@ def test_get_log_found_and_missing(fake):
     assert diag_repo.get_log(999) is None
 
 
-def test_stats_zero_total(fake):
-    fake.add("COUNT", ["cnt"], [[0]])
+def test_stats_zero_total(monkeypatch):
+    monkeypatch.setattr(connection, "read_only_snapshot", lambda q: [
+        (["cnt"], [[0]]), (["grp", "cnt"], []), (["grp", "cnt"], []),
+        (["grp", "cnt"], []), (["cnt"], [[0]]), (["cnt"], [[0]]),
+        (["cnt"], [[0]]),
+    ])
     out = diag_repo.stats()
     assert out["total"] == 0
     assert out["by_date"] == []
     assert out["abnormal_rate"] == 0.0
 
 
-def test_stats_aggregation(fake):
-    fake.add("COUNT", ["cnt"], [[10]])
-    fake.add("GROUP BY business_date", ["grp", "cnt"],
-             [["20250321", 6], ["20250320", 4]])
-    fake.add("GROUP BY diag_type", ["grp", "cnt"], [["fund", 8]])
-    fake.add("GROUP BY diag_class", ["grp", "cnt"], [["biz", 10]])
-    fake.add("escalated = TRUE", ["cnt"], [[2]])
-    fake.add("diag_status = 'error'", ["cnt"], [[1]])
-    fake.add("annot_status IS NOT NULL", ["cnt"], [[3]])
+def test_stats_aggregation(monkeypatch):
+    monkeypatch.setattr(connection, "read_only_snapshot", lambda q: [
+        (["cnt"], [[10]]),
+        (["grp", "cnt"], [["20250321", 6], ["20250320", 4]]),
+        (["grp", "cnt"], [["fund", 8]]),
+        (["grp", "cnt"], [["biz", 10]]),
+        (["cnt"], [[2]]),
+        (["cnt"], [[1]]),
+        (["cnt"], [[3]]),
+    ])
     out = diag_repo.stats(top_n=10)
     assert out["total"] == 10
     assert out["by_date"][0] == {"key": "20250321", "count": 6}

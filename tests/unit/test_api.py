@@ -126,7 +126,8 @@ def test_diagnose_escalate_llm_unavailable_graceful_200(client, svc, monkeypatch
     r = client.post("/v1/diagnose", json={"text": UNMATCHED_TEXT, "escalate": True})
     assert r.status_code == 200
     body = r.json()
-    assert body["escalated"] is True
+    # LLM 不可用走规则兜底，未产生 LLM 结论，escalated 按实际路径为 False
+    assert body["escalated"] is False
     assert "兜底" in body["source"]
     assert body["answer"] is not None
     assert body["answer"]["root"]

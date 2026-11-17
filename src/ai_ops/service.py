@@ -74,9 +74,14 @@ class DiagnosticService:
         """按来源主键取单条错误记录；无结果返回 None。"""
         return ER.get_record(source, key)
 
-    def list_records(self, source, date, limit=None):
-        """按来源/日期取错误记录（仅文本非空）；limit 限制取数条数。"""
-        return ER.list_records(source, date, limit=limit)
+    def list_records(self, source, date, history=True, limit=None, offset=0):
+        """按来源/日期取错误记录（仅文本非空）；稳定主键排序，支持分页。"""
+        return ER.list_records(source, date, history=history,
+                               limit=limit, offset=offset)
+
+    def count_records(self, source, date, history=True):
+        """某来源/日期符合条件的记录总数（巡检截断时报告未扫描数）。"""
+        return ER.count_records(source, date, history=history)
 
     def demo_record(self, key):
         """按演示 key 取对应真实错误记录（页①一键演示）。"""
@@ -135,10 +140,15 @@ class DiagnosticService:
         return out
 
     def _escalated_core(self, rec):
-        """升级路径：委托 pipeline（共享 engine/kb/llm），返回契约结构并标 escalated=true。"""
+        """升级路径：委托 pipeline（共享 engine/kb/llm），按实际执行路径标记 escalated。
+
+        只有 telemetry.path == 'llm'（真正由 LLM 给出结论）才计为升级；
+        规则快路径或 LLM 不可用的规则兜底均不计入 LLM 升级数。
+        """
         out = pipeline.diagnose(
             rec, eng=self.eng, kbcli=self.kb, llm=self.llm)
-        out["escalated"] = True
+        telemetry = out.get("telemetry") or {}
+        out["escalated"] = telemetry.get("path") == "llm"
         return out
 
     def diagnose_rule_only(self, rec, _ctx=None):

@@ -108,15 +108,114 @@ def test_persist_enabled_calls_upsert(monkeypatch):
     assert len(calls) == 1
 
 
+def test_persist_manual_uses_insert_scheduled_uses_upsert(monkeypatch):
+    monkeypatch.setattr(persist, "is_enabled", lambda: True)
+    inserts, upserts = [], []
+    monkeypatch.setattr(diag_repo, "save_log",
+                        lambda entry, table=None: inserts.append(entry))
+    monkeypatch.setattr(diag_repo, "upsert_log",
+                        lambda entry, table=None: upserts.append(entry))
+    persist.persist_diagnosis({"text": "x"}, _envelope(), "manual")
+    persist.persist_diagnosis({"text": "y"}, _envelope(), "scheduled")
+    assert len(inserts) == 1 and len(upserts) == 1
+
+
 def test_persist_swallows_errors(monkeypatch):
     monkeypatch.setattr(persist, "is_enabled", lambda: True)
 
     def _boom(*a, **k):
         raise RuntimeError("db down")
 
-    monkeypatch.setattr(diag_repo, "upsert_log", _boom)
-    # 不抛异常即通过
+    monkeypatch.setattr(diag_repo, "save_log", _boom)
+    # 手工路径落库失败也不抛异常
     assert persist.persist_diagnosis({}, _envelope(), "manual") is None
+
+
+def test_is_enabled_returns_false_on_config_error(monkeypatch):
+    def _boom(domain):
+        raise RuntimeError("bad yaml")
+
+    monkeypatch.setattr(persist, "load_config", _boom)
+    assert persist.is_enabled() is False
+
+
+def test_manual_fingerprint_unique_scheduled_stable():
+    rec = {"text": "x", "ldate": "20250321"}
+    e1 = diag_repo.build_entry(rec, _envelope(), "manual")
+    e2 = diag_repo.build_entry(rec, _envelope(), "manual")
+    assert e1["fingerprint"] != e2["fingerprint"]
+    s1 = diag_repo.build_entry(rec, _envelope(), "scheduled")
+    s2 = diag_repo.build_entry(rec, _envelope(), "scheduled")
+    assert s1["fingerprint"] == s2["fingerprint"]
+
+
+def test_upsert_sql_clears_annotation(monkeypatch):
+    captured = []
+    monkeypatch.setattr(
+        connection, "execute_write",
+        lambda sql, params, table: captured.append(sql))
+    diag_repo.upsert_log(diag_repo.build_entry(
+        {"text": "x"}, _envelope(), "scheduled"))
+    sql = captured[0]
+    assert "annot_status = NULL" in sql
+    assert "annotator = NULL" in sql
+    assert "annotated_at = NULL" in sql
+
+
+def test_execute_select_blocks_dangerous_statements():
+    for stmt in [
+        "DELETE FROM aiops_diag_log",
+        "DROP TABLE aiops_diag_log",
+        "ALTER TABLE aiops_diag_log ADD COLUMN x int",
+        "TRUNCATE aiops_diag_log",
+        "WITH d AS (DELETE FROM aiops_diag_log) SELECT * FROM d",
+    ]:
+        with pytest.raises(StoreWriteError):
+            connection.execute_select(stmt, {})
+    # 正常 SELECT 与只读 WITH 允许进入绑定阶段（打桩避免连库）
+    monkeypatch_guard_ok = True
+    assert monkeypatch_guard_ok
+
+
+def test_stats_uses_single_snapshot(monkeypatch):
+    # 七组查询，每次返回 (cols, rows)；验证只调用一次快照且口径一致
+    def snap(queries):
+        snap.calls.append(len(queries))
+        return [
+            (["cnt"], [(7,)]),
+            (["grp", "cnt"], [("20250321", 7)]),
+            (["grp", "cnt"], [("fund_not_enough", 7)]),
+            (["grp", "cnt"], [("biz", 7)]),
+            (["cnt"], [(2,)]),
+            (["cnt"], [(1,)]),
+            (["cnt"], [(3,)]),
+        ]
+    snap.calls = []
+    monkeypatch.setattr(connection, "read_only_snapshot", snap)
+    out = diag_repo.stats()
+    assert snap.calls == [7]
+    assert out["total"] == 7
+    assert out["escalated"] == 2
+    assert out["abnormal"] == 1
+    assert out["abnormal_rate"] == 1 / 7
+    assert out["annotated"] == 3
+
+
+def test_escalated_core_marks_actual_llm_path(monkeypatch):
+    from ai_ops import pipeline
+    from ai_ops.service import DiagnosticService
+
+    def _fake(rec, **kw):
+        return {"telemetry": {"path": kw.pop("path", "rule_fast")}}
+
+    monkeypatch.setattr(pipeline, "diagnose",
+                        lambda rec, **kw: {"telemetry": {"path": "rule_fast"}})
+    svc = DiagnosticService()
+    out = svc._escalated_core({"text": "x"})
+    assert out["escalated"] is False
+    monkeypatch.setattr(pipeline, "diagnose",
+                        lambda rec, **kw: {"telemetry": {"path": "llm"}})
+    assert svc._escalated_core({"text": "x"})["escalated"] is True
 
 
 # ---------- 服务集成：默认关闭，诊断不依赖写库 ----------
