@@ -225,6 +225,8 @@ def test_service_diagnose_with_persistence_disabled(monkeypatch):
     from ai_ops.service import DiagnosticService
 
     svc = DiagnosticService()
+    # 显式关闭持久化开关，确保前提不依赖本地配置文件
+    monkeypatch.setattr(persist, "is_enabled", lambda: False)
     # 若误触写连接应直接失败，证明关闭路径不连库
     monkeypatch.setattr(connection, "execute_write",
                         lambda *a, **k: pytest.fail("不应执行写操作"))

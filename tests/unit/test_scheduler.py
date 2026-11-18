@@ -2,6 +2,7 @@
 """方向一·阶段 1 定时巡检单元测试（离线、打桩，不连真实 GaussDB）。"""
 import pytest
 
+from ai_ops.dimple import collector as dimple_collector
 from ai_ops.scheduler import inspector, runner
 
 
@@ -147,6 +148,9 @@ def test_init_error_releases_lock(monkeypatch):
 def test_build_scheduler_none_when_disabled(monkeypatch):
     monkeypatch.setattr(inspector, "load_schedule",
                         lambda: {"enabled": False})
+    # 实时采集是独立开关，需一并关闭才会返回 None（不依赖本地配置文件）
+    monkeypatch.setattr(dimple_collector, "load_dimple_config",
+                        lambda: {"enabled": False})
     assert runner.build_scheduler() is None
 
 
@@ -163,12 +167,17 @@ def test_build_scheduler_interval_and_cron(monkeypatch):
     assert sched_cron.get_job("aiops_inspection") is not None
 
 
-def test_api_lifespan_scheduler_disabled_by_default():
+def test_api_lifespan_scheduler_disabled_by_default(monkeypatch):
     from fastapi.testclient import TestClient
 
+    # 显式关闭两类定时任务，确保结果不依赖本地配置文件
+    monkeypatch.setattr(inspector, "load_schedule",
+                        lambda: {"enabled": False})
+    monkeypatch.setattr(dimple_collector, "load_dimple_config",
+                        lambda: {"enabled": False})
     from ai_ops.api import app
     with TestClient(app) as client:
-        # 默认未启用巡检，调度器应为 None，服务仍正常
+        # 两类任务均未启用，调度器应为 None，服务仍正常
         assert client.app.state.scheduler is None
         resp = client.get("/healthz")
         assert resp.status_code == 200
