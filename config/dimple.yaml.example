@@ -1,0 +1,37 @@
+# Dimple 实时监控对接配置（接口级拉模式，准实时）
+# 用法：复制本文件为 dimple.yaml，按需修改；dimple.yaml 含口令，不入库，由部署方注入。
+#   copy config\dimple.yaml.example config\dimple.yaml
+# 也可用环境变量 AIOPS_DIMPLE_* 覆盖（建议口令走环境变量，不写明文）。
+#
+# enabled：实时监控总开关。
+#   false（默认）：不启动实时采集，服务行为与现状一致；
+#   true ：FastAPI 启动时在进程内创建定时任务，按 interval_minutes 拉取 Dimple 接口。
+enabled: false
+
+# Dimple 平台基础地址（接口网关根，不含具体业务路径）。
+base_url: "http://10.253.162.119:9000"
+
+# 登录账号与口令（口令建议用环境变量 AIOPS_DIMPLE_PASSWORD 注入，不在此留明文）。
+username: "admin"
+password: ""
+
+# OAuth2 客户端凭证（对应登录请求头 Basic base64(client_id:client_secret)）。
+client_id: "testjwtclientid"
+client_secret: "XY7kmzoNzl100"
+
+# 单次 HTTP 超时（秒）。
+timeout: 10
+
+# 拉取间隔（分钟）：准实时，建议 1-5；越小越接近实时，注意不要给对方造成压力。
+interval_minutes: 5
+
+# 分页大小与每次采集每个端点的最大页数（硬上限，防止异常数据量导致无限拉取）。
+page_size: 50
+max_pages: 5
+
+# 采集端点列表；留空 = 全部已注册端点。
+# 目前已注册：dimple_compliance_alarm（合规预警）。
+endpoints: []
+
+# 游标状态中保留的最近指纹条数（用于跨轮次跳过已处理记录）。
+recent_keep: 1000

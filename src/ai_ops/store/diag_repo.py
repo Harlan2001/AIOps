@@ -133,17 +133,19 @@ def save_log(entry, table=None):
 def upsert_log(entry, table=None):
     """插入；指纹冲突时更新为最新结论，避免巡检重复记账。
 
+    本 GaussDB 内核不支持 PG 的 ON CONFLICT，改用其兼容的 MySQL 风格
+    ON DUPLICATE KEY UPDATE（VALUES(col) 引用待插入值）。
     结论被替换时，旧的人工标注（状态/正确答案/标注人/时间）一并清空，
     避免新结论被误认为仍已人工确认。
     """
     table = table or load_table()
     update_cols = [c for c in _INSERT_COLS
                    if c not in ("fingerprint", "trigger_type")]
-    set_clause = ", ".join("%s = EXCLUDED.%s" % (c, c) for c in update_cols)
+    set_clause = ", ".join("%s = VALUES(%s)" % (c, c) for c in update_cols)
     set_clause += (
         ", annot_status = NULL, correct_answer = NULL, "
         "annotator = NULL, annotated_at = NULL")
-    sql = _insert_sql(table) + " ON CONFLICT (fingerprint) DO UPDATE SET " + set_clause
+    sql = _insert_sql(table) + " ON DUPLICATE KEY UPDATE " + set_clause
     return connection.execute_write(sql, entry, table)
 
 

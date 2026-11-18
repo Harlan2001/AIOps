@@ -5,6 +5,7 @@ import {
   DashboardOutlined,
   HistoryOutlined,
   MedicineBoxOutlined,
+  MonitorOutlined,
   TableOutlined,
 } from '@ant-design/icons-vue'
 
@@ -35,6 +36,7 @@ const badgeText = computed(() => {
 const menuItems = [
   { key: 'diagnose', icon: MedicineBoxOutlined, label: '单条诊断' },
   { key: 'batch', icon: TableOutlined, label: '批量回放' },
+  { key: 'realtime', icon: MonitorOutlined, label: '实时监控' },
   { key: 'dashboard', icon: DashboardOutlined, label: '管理看板' },
   { key: 'history', icon: HistoryOutlined, label: '历史诊断' },
 ]

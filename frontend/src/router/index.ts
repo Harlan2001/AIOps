@@ -28,6 +28,12 @@ const router = createRouter({
       component: () => import('@/views/history/HistoryView.vue'),
       meta: { title: '历史诊断' },
     },
+    {
+      path: '/realtime',
+      name: 'realtime',
+      component: () => import('@/views/realtime/RealtimeView.vue'),
+      meta: { title: '实时监控' },
+    },
   ],
 })
 

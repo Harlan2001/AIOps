@@ -200,6 +200,16 @@ types:
       "客户": "client"
     runbook: rb_self_trade_alert
 
+  - id: violation_order
+    title: 违规委托
+    severity: error
+    keywords: ["违规委托"]
+    err_codes: []
+    param_alias:
+      "合约": "contract"
+      "交易员": "trader"
+    runbook: rb_violation_order
+
   # ---- 流程对账模板（flow_control）----
 
   - id: margin_mismatch

@@ -54,9 +54,11 @@ def _assert_allowed(sql, table):
     verb = m.group(1).lower()
     tm = _TABLE_RE[verb].match(sql.strip())
     target = tm.group(1) if tm else ""
-    # 允许带 schema 前缀（dimple.aiops_diag_log）或裸表名。
+    # 允许带 schema 前缀（dimple.aiops_diag_log）或裸表名；比较时统一取
+    # 最后一段表名，避免 table 配置带 schema 时被误判为越权。
     bare = target.split(".")[-1]
-    if bare != table:
+    expected_bare = table.split(".")[-1]
+    if bare != expected_bare:
         raise StoreWriteError(
             "写连接仅允许操作日志表 %s，目标为 %s，已拒绝" % (table, target))
 
