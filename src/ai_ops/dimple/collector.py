@@ -34,8 +34,9 @@ _logger = logging.getLogger("ai_ops.dimple")
 Endpoint = namedtuple(
     "Endpoint",
     ["id", "label", "path", "text_col", "date_col", "time_col",
-     "key_cols", "biz_cols", "text_template", "member_trader_col"])
-Endpoint.__new__.__defaults__ = (None, None)
+     "key_cols", "biz_cols", "text_template", "member_trader_col",
+     "extra_body"])
+Endpoint.__new__.__defaults__ = (None, None, None)
 
 ENDPOINTS = {
     "dimple_compliance_alarm": Endpoint(
@@ -99,7 +100,223 @@ ENDPOINTS = {
         "额度与限额：交易所 {exchCode}，会员 {memberId}，合约 {contractId}，"
         "配置类型 {configType}，预警值 {alarmValue}，限额值 {limitValue}，"
         "实际值 {realValue}，是否超限 {ifOver}"),
+    "dimple_integrate_posi": Endpoint(
+        "dimple_integrate_posi", "综合持仓",
+        "/api/ksp-gp2-dimple/api/integrate-posi-real-time-query/query",
+        "", "", "",
+        ["contractId", "userId", "purposeCode", "memberId", "clientId", "varietyId"],
+        ["contractId", "userId", "purposeCode", "memberId", "clientId",
+         "varietyId", "qty", "costPrice", "lastPrice", "unrpl", "rpl",
+         "allRpl", "profitloss"],
+        "综合持仓：合约 {contractId}，用户 {userId}，用途 {purposeCode}，会员 "
+        "{memberId}，客户 {clientId}，品种 {varietyId}，持仓量 {qty}，成本价 "
+        "{costPrice}，最新价 {lastPrice}，浮动盈亏 {unrpl}，平仓盈亏 {rpl}，"
+        "总盈亏 {allRpl}，盈亏 {profitloss}"),
+    "dimple_estimate_account_remain": Endpoint(
+        "dimple_estimate_account_remain", "预估账户资金",
+        "/api/ksp-gp2-dimple/api/estimate-account-remain/query",
+        "", "", "",
+        ["exchCode", "memberId"],
+        ["exchCode", "memberId", "lastRemain", "dayRemainAmt", "unretOutAmt",
+         "unretInAmt", "cashBalance", "expectRemainAtm", "note"],
+        "预估账户资金：交易所 {exchCode}，会员 {memberId}，上日结余 {lastRemain}，"
+        "当日发生额 {dayRemainAmt}，未划出 {unretOutAmt}，未划入 {unretInAmt}，"
+        "现金余额 {cashBalance}，预计结余 {expectRemainAtm}，备注 {note}"),
+    "dimple_estimate_storage_remain": Endpoint(
+        "dimple_estimate_storage_remain", "预估库存",
+        "/api/ksp-gp2-dimple/api/estimate-storage-remain/query",
+        "", "", "",
+        ["exchCode", "memberId", "clientId", "deliveryVarietyId"],
+        ["exchCode", "memberId", "clientId", "deliveryVarietyId", "lastRemain",
+         "dayRemainQty", "unretOutQty", "unretInQty", "realtimeStorage",
+         "expectRemainQty", "note"],
+        "预估库存：交易所 {exchCode}，会员 {memberId}，客户 {clientId}，交割品种 "
+        "{deliveryVarietyId}，上日结余 {lastRemain}，当日发生量 {dayRemainQty}，"
+        "未划出 {unretOutQty}，未划入 {unretInQty}，实时库存 {realtimeStorage}，"
+        "预计结余 {expectRemainQty}，备注 {note}"),
+    "dimple_fund_realtime": Endpoint(
+        "dimple_fund_realtime", "资金实时",
+        "/api/ksp-gp2-dimple/api/fund-realtime-query/query",
+        "", "", "",
+        ["exchCode", "memberId"],
+        ["exchCode", "memberId", "exchName", "lastRemain", "lastMargin",
+         "moneyIn", "moneyOut", "buyAmount", "sellAmount", "offsetProfit",
+         "tradeMargin", "frozenMargin", "avail", "availFloat", "frozenPremium",
+         "buySellPremium", "lawLastForzenAmt", "lawForzenAmt"],
+        "资金实时：交易所 {exchCode}，会员 {memberId}，上日结余 {lastRemain}，"
+        "上日保证金 {lastMargin}，入金 {moneyIn}，出金 {moneyOut}，买入额 "
+        "{buyAmount}，卖出额 {sellAmount}，平仓盈亏 {offsetProfit}，交易保证金 "
+        "{tradeMargin}，冻结保证金 {frozenMargin}，可用资金 {avail}"),
+    "dimple_member_inventory": Endpoint(
+        "dimple_member_inventory", "会员库存",
+        "/api/ksp-gp2-dimple/api/member-inventory-real-query/query",
+        "", "", "",
+        ["deliveryVarietyId", "memberId", "clientId"],
+        ["deliveryVarietyId", "memberId", "clientId", "totalStorage",
+         "availableStorage", "frozenStorage", "pendStorage", "mortStorage",
+         "lawFrozenStorage", "transferFrozenStorage", "setoffFrozenStorage",
+         "realUnqty", "custTotalStorage"],
+        "会员库存：交割品种 {deliveryVarietyId}，会员 {memberId}，客户 {clientId}，"
+        "总库存 {totalStorage}，可用 {availableStorage}，冻结 {frozenStorage}，"
+        "待处理 {pendStorage}，质押 {mortStorage}，实际库存 {realUnqty}"),
+    "dimple_real_time_arbi_quot": Endpoint(
+        "dimple_real_time_arbi_quot", "实时套利行情",
+        "/api/ksp-gp2-dimple/api/real-time-arbi-quot/query",
+        "", "", "",
+        ["contractId"],
+        ["contractId", "openPrice", "highPrice", "lowPrice", "lastPrice",
+         "change1", "change2", "bidPrice", "bidQty", "askPrice", "askQty",
+         "closePrice", "clearPrice", "lastClear", "riseLimit", "fallLimit",
+         "lastClose"],
+        "实时套利行情：合约 {contractId}，开盘价 {openPrice}，最高 {highPrice}，"
+        "最低 {lowPrice}，最新价 {lastPrice}，买价 {bidPrice}，买量 {bidQty}，"
+        "卖价 {askPrice}，卖量 {askQty}，收盘价 {closePrice}，结算价 {clearPrice}"),
+    "dimple_real_time_quot": Endpoint(
+        "dimple_real_time_quot", "实时行情",
+        "/api/ksp-gp2-dimple/api/real-time-quot/query",
+        "", "", "",
+        ["contractId"],
+        ["contractId", "openPrice", "highPrice", "lowPrice", "lastPrice",
+         "change1", "change2", "bidPrice", "bidQty", "askPrice", "askQty",
+         "matchTotQty", "openInterest", "change", "closePrice", "clearPrice",
+         "lastClear", "riseLimit", "fallLimit", "lastClose"],
+        "实时行情：合约 {contractId}，开盘价 {openPrice}，最高 {highPrice}，最低 "
+        "{lowPrice}，最新价 {lastPrice}，买价 {bidPrice}，买量 {bidQty}，卖价 "
+        "{askPrice}，卖量 {askQty}，成交量 {matchTotQty}，持仓量 {openInterest}，"
+        "收盘价 {closePrice}，结算价 {clearPrice}"),
+    "dimple_self_run_trader_stock": Endpoint(
+        "dimple_self_run_trader_stock", "自营交易员库存",
+        "/api/ksp-gp2-dimple/api/self-run-trader-stock-real-query/query",
+        "", "", "",
+        ["memberId", "clientId", "deliveryVarietyId", "traderNo", "purposeCode"],
+        ["memberId", "clientId", "deliveryVarietyId", "traderNo", "purposeCode",
+         "totalStorage", "availableStorage", "frozenStorage", "pendStorage",
+         "mortStorage", "lawFrozenStorage", "transferFrozenStorage",
+         "setoffFrozenStorage"],
+        "自营交易员库存：会员 {memberId}，客户 {clientId}，交割品种 "
+        "{deliveryVarietyId}，交易员 {traderNo}，用途 {purposeCode}，总库存 "
+        "{totalStorage}，可用 {availableStorage}，冻结 {frozenStorage}，待处理 "
+        "{pendStorage}，质押 {mortStorage}"),
 }
+
+# 字段在当前无数据时无法预知的端点：统一用通用渲染（有数据时自动拼接全部字段）。
+# 元组：(id 后缀, 中文名, 接口路径, extra_body)
+_GENERIC = [
+    ("alarm_note", "预警说明",
+     "/api/ksp-gp2-dimple/api/alarm-note-real-time-query/query",
+     {"isMember": True}),
+    ("client_storage_flow", "客户库存流水",
+     "/api/ksp-gp2-dimple/api/client-storage-flow-real-time-query/query", None),
+    ("defer_fee_rate", "递延费率",
+     "/api/ksp-gp2-dimple/api/defer-fee-rate-real-time-query/query", None),
+    ("member_exposure", "会员风险敞口",
+     "/api/ksp-gp2-dimple/api/member-exposure-real-time-query/query", None),
+    ("rfq_default_declaration", "保证金询价违约申报",
+     "/api/ksp-gp2-dimple/api/rfq-default-declaration-real-time-query/query", None),
+    ("rfq_match", "询价成交",
+     "/api/ksp-gp2-dimple/api/rfq-match-real-time-query/query", None),
+    ("rfq_uncheck_match", "询价未确认成交",
+     "/api/ksp-gp2-dimple/api/rfq-uncheck-match-real-time-query/query", None),
+    ("trade_purpose_posi", "交易用途持仓",
+     "/api/ksp-gp2-dimple/api/trade-purpose-posi-real-time-query/query", None),
+    ("trader_credit_limit", "交易员授信额度",
+     "/api/ksp-gp2-dimple/api/trader-credit-limit-real-time-query/query", None),
+    ("trader_delivery_declare_trade", "交易员交割申报成交",
+     "/api/ksp-gp2-dimple/api/trader-delivery-declare-trade-real-time-query/query", None),
+    ("trader_exposure", "交易员风险敞口",
+     "/api/ksp-gp2-dimple/api/trader-exposure-real-time-query/query", None),
+    ("member_hold", "会员持仓",
+     "/api/ksp-gp2-dimple/api/member-hold-real-query/query", None),
+    ("member_qty_weight_limit", "会员数量重量限额",
+     "/api/ksp-gp2-dimple/api/member-qty-weight-limit-time-query/query", None),
+    ("member_transaction", "会员交易",
+     "/api/ksp-gp2-dimple/api/member-transaction-real-query/query", None),
+    ("member_wrong_order", "会员错单",
+     "/api/ksp-gp2-dimple/api/member-wrong-single-real-query/query", None),
+    ("self_run_trader_deal", "自营交易员成交",
+     "/api/ksp-gp2-dimple/api/self-run-trader-deal-real-query/query", None),
+    ("self_run_trader_hold", "自营交易员持仓",
+     "/api/ksp-gp2-dimple/api/self-run-trader-hold-real-query/query", None),
+    ("self_run_trader_wrong", "自营交易员错单",
+     "/api/ksp-gp2-dimple/api/self-run-trader-wrong-sin-real-query/query", None),
+    ("trader_qty_weight_limit", "交易员数量重量限额",
+     "/api/ksp-gp2-dimple/api/trader-qty-weight-limit-time-query/query", None),
+    ("option_exec", "期权行权",
+     "/api/ksp-gp2-dimple/api/option-exec-real-time-query/query-trader", None),
+    ("self_hedging", "自营套保",
+     "/api/ksp-gp2-dimple/api/self-hedging-real-time-query/query-trader", None),
+    ("rfq_posi", "询价持仓",
+     "/api/ksp-gp2-dimple/api/rfq-posi-real-time-query/query-trader",
+     {"dueDateStart": "2026-01-01", "dueDateEnd": "2026-12-31"}),
+    ("trader_delivery_declare", "交易员交割申报",
+     "/api/ksp-gp2-dimple/api/trader-delivery-declare-real-time-query/query-delivery",
+     None),
+]
+for _suf, _label, _path, _body in _GENERIC:
+    _eid = "dimple_" + _suf
+    ENDPOINTS[_eid] = Endpoint(
+        _eid, _label, _path, "", "", "", [], [], None, None, _body)
+
+# ---------------------------------------------------------------------------
+# 异常过滤：实时监控只保留"确实是异常/告警"的记录，正常业务数据不诊断、不落库。
+#
+# 分两类：
+#   1) BUSINESS_ENDPOINTS —— 纯业务数据查询页（行情/持仓/资金/库存/委托/成交/
+#      申报/流水等），整页都是正常数据，直接跳过；
+#   2) ANOMALY_PREDICATES —— 监控页里需要按字段判断是否异常的端点，
+#      判定函数返回 True 才是异常（如额度限额只有 ifOver 表示超限才告警）。
+# 其余端点（合规预警、自成交、违规委托、错单、敞口等）默认即告警，记录保留。
+# ---------------------------------------------------------------------------
+BUSINESS_ENDPOINTS = {
+    # 正常委托/成交流水
+    "dimple_trader_order", "dimple_member_order",
+    # 行情类
+    "dimple_real_time_quot", "dimple_real_time_arbi_quot",
+    # 持仓类
+    "dimple_integrate_posi", "dimple_trade_purpose_posi",
+    "dimple_member_hold", "dimple_self_run_trader_hold",
+    "dimple_rfq_posi",
+    # 资金类
+    "dimple_fund_realtime", "dimple_estimate_account_remain",
+    # 库存类
+    "dimple_member_inventory", "dimple_self_run_trader_stock",
+    "dimple_estimate_storage_remain", "dimple_client_storage_flow",
+    # 成交类
+    "dimple_self_run_trader_deal", "dimple_member_transaction",
+    "dimple_rfq_match", "dimple_rfq_uncheck_match",
+    # 配置/费率/限额查询（无超限标志，仅展示当前参数）
+    "dimple_defer_fee_rate", "dimple_member_qty_weight_limit",
+    "dimple_trader_qty_weight_limit",
+    # 业务操作/申报记录
+    "dimple_option_exec", "dimple_self_hedging",
+    "dimple_trader_delivery_declare",
+    "dimple_trader_delivery_declare_trade",
+    "dimple_rfq_default_declaration",
+}
+
+# 表示"超限/成立"的取值（兼容字符串与数字、布尔）。
+_TRUE_TOKENS = {"1", "true", "y", "yes", "是", "超限"}
+
+
+def _quota_is_over(raw):
+    """额度与限额：仅当 ifOver 表示超限时才是异常。"""
+    return str(raw.get("ifOver", "")).strip().lower() in _TRUE_TOKENS
+
+
+ANOMALY_PREDICATES = {
+    "dimple_quota_and_limit": _quota_is_over,
+}
+
+
+def is_anomaly(ep_id, raw):
+    """判断一条实时记录是否为真实异常。业务数据页返回 False；
+    有记录级判定规则的按规则判定；其余告警类端点默认 True。"""
+    if ep_id in BUSINESS_ENDPOINTS:
+        return False
+    pred = ANOMALY_PREDICATES.get(ep_id)
+    if pred is not None:
+        return bool(pred(raw))
+    return True
 
 _DEFAULTS = {
     "enabled": False,
@@ -130,14 +347,20 @@ def is_enabled():
 
 
 def _render_text(ep, raw):
-    """生成诊断文本：有 text_template 用 {字段名} 渲染；否则取单一文本列。"""
+    """生成诊断文本：有 text_template 用 {字段名} 渲染；否则取单一文本列；
+    两者都没有（无数据时无法预知字段的端点）时，自动拼接全部非空字段。"""
     if ep.text_template:
         def _sub(m):
             v = raw.get(m.group(1))
             return "" if v is None else str(v)
         return re.sub(r"\{([A-Za-z0-9_]+)\}", _sub,
                       ep.text_template).strip()
-    return (raw.get(ep.text_col) or "").strip()
+    if ep.text_col:
+        return (raw.get(ep.text_col) or "").strip()
+    # 通用兜底：把整条记录的非空字段拼成可读文本。
+    parts = ["%s：%s" % (k, v) for k, v in raw.items()
+             if v not in (None, "")]
+    return ("%s：" % ep.label + "，".join(parts)).strip()
 
 
 def _normalize_business_date(value):
@@ -191,7 +414,11 @@ def normalize_record(ep, raw):
     ldate = _normalize_business_date(raw.get(ep.date_col))
     key = {c: raw.get(c) for c in ep.key_cols}
     key_json = json.dumps(key, ensure_ascii=False, sort_keys=True)
-    params = {c: raw.get(c) for c in ep.biz_cols}
+    # biz_cols 留空（字段未知的端点）时，自动带上全部原始字段。
+    if ep.biz_cols:
+        params = {c: raw.get(c) for c in ep.biz_cols}
+    else:
+        params = dict(raw)
     # 需要会员反查的端点：补齐 member/client 供 runbook 取证。
     if ep.member_trader_col:
         member, client = _lookup_member(
@@ -287,7 +514,8 @@ def _fetch_endpoint(client, ep, cfg, cursor):
     while page_no <= max_pages:
         try:
             data = client.query_page(
-                ep.path, page_no=page_no, page_size=page_size)
+                ep.path, page_no=page_no, page_size=page_size,
+                filters=ep.extra_body)
         except DimpleError as e:
             _logger.warning("端点 %s 第 %d 页拉取失败（已中止该端点）：%s",
                             ep.id, page_no, e)
@@ -300,6 +528,9 @@ def _fetch_endpoint(client, ep, cfg, cursor):
         for raw in rows:
             # 跳过合计/小计汇总行，只处理真实告警。
             if _is_summary_row(raw):
+                continue
+            # 异常过滤：正常业务数据（行情/持仓/资金/库存等）不诊断、不落库。
+            if not is_anomaly(ep.id, raw):
                 continue
             last_key = {c: raw.get(c) for c in ep.key_cols}
             record, fingerprint = normalize_record(ep, raw)

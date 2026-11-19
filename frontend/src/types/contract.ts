@@ -9,7 +9,10 @@ export interface Answer {
 }
 
 export interface EvidenceRow {
+  id?: string
   title?: string
+  kind?: string
+  primary?: boolean
   r?: {
     status?: string
     missing?: string[]
@@ -155,6 +158,8 @@ export interface DiagLogItem {
   annotator?: string | null
   annotated_at?: string | null
   created_at?: string | null
+  // 完整诊断快照（JSON 字符串），详情页解析后展示根因、处理建议与取证证据。
+  result_json?: string | null
 }
 
 export interface DiagListResponse {

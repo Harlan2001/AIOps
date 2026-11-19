@@ -312,14 +312,20 @@ def diagnosis_list(request: Request, source: str | None = None,
                    diag_class: str | None = None, diag_type: str | None = None,
                    annot_status: str | None = None,
                    start_date: str | None = None, end_date: str | None = None,
+                   anomaly_only: bool = False,
                    offset: int = 0, limit: int = 50):
-    """分页查询历史诊断（支持来源/类型/分类/标注/日期筛选）。"""
+    """分页查询历史诊断（支持来源/类型/分类/标注/日期筛选）。
+
+    anomaly_only=True：只返回真实异常（排除行情/持仓/资金等业务数据），
+    供实时监控页使用；历史页不传，默认查看全部。
+    """
     try:
         return diag_repo.list_logs(
             source=source, diag_class=diag_class, diag_type=diag_type,
             annot_status=annot_status, start_date=start_date,
             end_date=end_date, offset=max(0, offset),
-            limit=max(1, min(limit, 200)))
+            limit=max(1, min(limit, 200)),
+            exclude_business=anomaly_only)
     except HTTPException:
         raise
     except Exception as e:  # noqa: BLE001

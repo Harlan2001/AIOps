@@ -12,6 +12,7 @@ export interface DiagListParams {
   annot_status?: string
   start_date?: string
   end_date?: string
+  anomaly_only?: boolean
   offset?: number
   limit?: number
 }
