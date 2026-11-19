@@ -1,0 +1,36 @@
+# 诊断树：基础数据/主数据配置缺失或不合法（数据检查 tp_data_check_log）
+# 数据形如：品种/合约主数据未设置、挂牌基准价不合法、交割保证金未设置、席位号不存在等。
+# 业务含义：合约或品种的基础参数缺失/非法，业务无法正常进行，需在基础数据管理补齐。
+id: rb_base_data_config
+title: 基础数据配置错误诊断
+
+steps:
+  - id: contract_table_ready
+    type: sql_check
+    title: 合约主数据表可查（主检查，确认基础资料域可用）
+    primary: true
+    expect: {exists: true}
+    sql: "SELECT contract_id, exch_code, status, ref_price FROM dimple.tt_ftr_contract LIMIT 5"
+
+  - id: contract_detail
+    type: sql_query
+    title: 该合约主数据明细（旁证，按报错合约定位）
+    sql: "SELECT contract_id, exch_code, status, min_hand, max_hand, ref_price FROM dimple.tt_ftr_contract WHERE contract_id = :contract"
+
+  - id: variety_detail
+    type: sql_query
+    title: 该品种主数据（旁证，对应"品种数据未设置"）
+    sql: "SELECT variety_id, status, min_hand, max_hand FROM dimple.tt_ftr_variety WHERE variety_id = :variety"
+
+  - id: margin_rate
+    type: sql_query
+    title: 交割保证金率（旁证，对应"保证金未设置"）
+    sql: "SELECT contract_id, member_id, margin_rate FROM dimple.tc_delivery_margin_rate WHERE contract_id = :contract"
+
+default:
+  root: "基础数据配置错误：该合约/品种的主数据未配置或取值非法（基准价、手数、保证金率等），导致业务校验不通过"
+  action:
+    - "在基础数据管理中核对该合约/品种是否存在、状态是否正常"
+    - "补齐或修正挂牌基准价、最小/最大手数、交割保证金率等参数"
+    - "核对席位号、交易编码等关联主数据是否配置"
+    - "参数补齐并复核后重新发起业务"

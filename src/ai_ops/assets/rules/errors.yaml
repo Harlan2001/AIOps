@@ -40,7 +40,7 @@ types:
   - id: close_posi_not_enough
     title: 平仓数量不够
     severity: error
-    keywords: ["平仓数量不够", "历史仓数量不够", "平仓数量"]
+    keywords: ["平仓数量不够", "历史仓数量不够", "平仓数量", "客户无足够的平仓数量", "无足够的平仓数量"]
     err_codes: []
     param_alias:
       "会员": "member"
@@ -231,3 +231,46 @@ types:
     param_alias:
       "交易所": "exch"
     runbook: rb_settle_not_ready
+
+  # ---- 新增：合规撤单 / 基础数据 / 初始化 / 报价参数（覆盖原未识别长尾）----
+
+  - id: cancel_order_alert
+    title: 频繁撤单次数预警
+    severity: warn
+    keywords: ["已撤单次数", "大额撤单次数", "撤单次数"]
+    err_codes: []
+    param_alias:
+      "会员": "member"
+      "客户": "client"
+    runbook: rb_cancel_order_alert
+
+  - id: base_data_config_error
+    title: 基础数据配置错误
+    severity: error
+    keywords: ["数据未设置", "挂牌基准价不合法", "保证金未设置", "席位号不存在", "基准价不合法", "交割保证金"]
+    err_codes: []
+    param_alias:
+      "合约": "contract"
+      "品种": "variety"
+      "会员": "member"
+      "客户": "client"
+    runbook: rb_base_data_config
+
+  - id: system_init_error
+    title: 系统初始化错误
+    severity: error
+    keywords: ["初始化日期不正确", "初始化前系统状态不正确", "初始化在进行中", "不能重入"]
+    err_codes: []
+    param_alias:
+      "交易所": "exch"
+    runbook: rb_system_init
+
+  - id: quote_para_error
+    title: 报价参数错误
+    severity: warn
+    keywords: ["手工报价模式", "最小报价量", "报单数量小于", "合约代码输入错误"]
+    err_codes: []
+    param_alias:
+      "合约": "contract"
+      "交易员": "trader"
+    runbook: rb_quote_para
