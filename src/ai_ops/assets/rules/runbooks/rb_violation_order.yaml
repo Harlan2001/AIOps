@@ -1,0 +1,29 @@
+# 诊断树：违规委托实时诊断（Dimple 实时监控 violation-order 接口）
+# 数据形如：委托因违反参数规则（数量手数、价格价差/偏差、参数类型等）被系统拒绝。
+# 业务含义：报单未通过合规/风控的参数校验，需要对照该合约的委托参数限制修正后重报。
+id: rb_violation_order
+title: 违规委托实时诊断
+steps:
+  - id: order_param_limit
+    type: sql_check
+    title: 该合约委托参数限制（最小/最大手数、价差、是否控制交易员）
+    primary: true
+    expect: {exists: true}
+    sql: "SELECT contract_id, trader_no, min_hand, max_hand, price_diff, if_trader_ctl FROM dimple.tt_order_para WHERE contract_id = :contractId"
+    on_fail:
+      root: "未配置委托参数：合约 {contractId} 在委托参数表无记录，委托被拦截可能因缺少参数规则"
+      action:
+        - "在【委托参数管理】中为该合约配置最小/最大下单手数与允许价差"
+
+  - id: price_deviation
+    type: sql_query
+    title: 价格偏差阈值（价格类违规旁证，含全局配置）
+    sql: "SELECT exch_code, contract_id, price_limit, price_alarm FROM dimple.tc_price_deviation_parameter WHERE contract_id = :contractId OR contract_id = '$'"
+
+default:
+  root: "违规委托：合约 {contractId} 的委托因违反参数规则被拒（数量超出手数限制，或价格超出允许价差/偏差），请对照参数限制修正后重新报单"
+  action:
+    - "核对委托数量是否在最小/最大下单手数范围内"
+    - "核对委托价格与基准价的价差是否超出允许范围"
+    - "核对买卖/开平、投保、定单类型与状态字段是否合法"
+    - "如确认为正常业务需要，申请调整参数限制或加入白名单"

@@ -1,0 +1,31 @@
+# 诊断树：系统初始化 / 状态错误（数据检查 tp_data_check_log）
+# 数据形如：初始化日期不正确、初始化前系统状态不正确、初始化进行中不能重入。
+# 业务含义：系统未处于可初始化状态，或重复触发初始化，需核对结算日期与系统状态。
+id: rb_system_init
+title: 系统初始化错误诊断
+
+steps:
+  - id: process_state
+    type: sql_check
+    title: 控制流程状态可查（主检查，确认初始化流程与当前状态）
+    primary: true
+    expect: {exists: true}
+    sql: "SELECT pro_id, pro_name, process_status FROM dimple.tc_control_process LIMIT 8"
+
+  - id: clear_date
+    type: sql_query
+    title: 结算日期（旁证，初始化日期须为结算日下一交易日）
+    sql: "SELECT clear_date FROM dimple.tc_clear_date ORDER BY clear_date DESC LIMIT 6"
+
+  - id: biz_ctrl
+    type: sql_query
+    title: 业务控制状态（旁证）
+    sql: "SELECT trade_date, type, code, value FROM dimple.tp_biz_ctrl LIMIT 8"
+
+default:
+  root: "系统初始化错误：初始化日期不正确，或系统当前状态不满足初始化条件，或已有初始化在进行中（防重入）"
+  action:
+    - "核对初始化日期是否恰为结算日的下一交易日，不能用自然日代替"
+    - "通过控制流程确认当前系统状态，排除未完成的前置环节"
+    - "若已有初始化在进行，等待其完成后再操作，避免重复触发"
+    - "确认结算日期与业务控制状态无误后重新执行初始化"

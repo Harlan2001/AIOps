@@ -1,0 +1,26 @@
+# 诊断树：报价参数错误（报价错误委托 tt_his_quote_err_order）
+# 数据形如：当前为手工报价模式、报单数量小于报价商最小报价量、合约代码输入错误。
+# 业务含义：报价模式或报价量不满足报价商规则，需切换模式或调整数量后重报。
+id: rb_quote_para
+title: 报价参数错误诊断
+
+steps:
+  - id: order_para_ready
+    type: sql_check
+    title: 委托/报价参数表可查（主检查，确认报价参数规则可用）
+    primary: true
+    expect: {exists: true}
+    sql: "SELECT contract_id, trader_no, min_hand, max_hand, price_diff FROM dimple.tt_order_para LIMIT 8"
+
+  - id: contract_quote_rule
+    type: sql_query
+    title: 该合约报价规则（旁证）
+    sql: "SELECT contract_id, status, min_hand, max_hand, tick FROM dimple.tt_ftr_contract WHERE contract_id = :contract"
+
+default:
+  root: "报价参数错误：报价模式或报价数量不满足报价商规则（手工报价模式、低于最小报价量，或合约代码错误）"
+  action:
+    - "确认当前报价模式，必要时由手工报价切换为允许的报价模式"
+    - "对照最小报价量/最小手数调整报单数量后重新报价"
+    - "核对合约代码输入是否正确、合约是否处于可交易状态"
+    - "复核各腿报价参数一致后再提交"

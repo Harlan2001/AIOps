@@ -1,0 +1,31 @@
+# 诊断树：频繁撤单 / 大额撤单次数预警（合规报警 tc_rule_alarm_note）
+# 数据形如：某合约已撤单（或大额撤单）次数接近/达到预警阀值，系统发出合规预警。
+# 业务含义：存在频繁报撤单嫌疑，需核对交易策略与撤单阈值，必要时调整报单逻辑。
+id: rb_cancel_order_alert
+title: 频繁撤单次数预警诊断
+
+extra_params:
+  cancel_count: {regex: '已撤单次数[:：]\s*(\d+)'}
+  big_cancel_count: {regex: '大额撤单次数[:：]\s*(\d+)'}
+  threshold: {regex: '预警阀值[:：]\s*(\d+)'}
+
+steps:
+  - id: alarm_switch_on
+    type: sql_check
+    title: 风控报警开关已启用（主检查，确认系统处于合规报警生效状态）
+    primary: true
+    expect: {exists: true}
+    sql: "SELECT risk_type, risk_info, risk_value, if_alarm FROM dimple.tc_risk_control WHERE if_alarm = '1'"
+
+  - id: risk_para
+    type: sql_query
+    title: 风控参数配置（旁证）
+    sql: "SELECT para_code, para_value, para_desc FROM dimple.tc_risk_config"
+
+default:
+  root: "频繁撤单预警：该合约已撤单次数（{cancel_count}）接近或达到预警阀值（{threshold}），存在频繁报撤单的合规风险"
+  action:
+    - "核对交易/报价策略是否异常，确认是否为程序化频繁报撤单"
+    - "对照风控参数确认该合约撤单阈值，评估当前撤单频率是否合理"
+    - "调整报单逻辑、减少无效报撤；如确属正常业务需要，申请阈值调整或白名单"
+    - "持续跟踪后续撤单次数，防止突破监管限额"

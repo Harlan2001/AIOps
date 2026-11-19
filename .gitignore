@@ -2,6 +2,9 @@
 config/llm.yaml
 config/kb.yaml
 config/db.yaml
+config/dimple.yaml
+config/store.yaml
+config/schedule.yaml
 
 # ===== 运行时数据与产物（模型 / 数据集 / 报告 / 日志 / KB 快照，不入库）=====
 # 测试夹具等需要入库的小样本 CSV 请放在 tests/fixtures/（不在 /var/ 下，不会被忽略）
@@ -18,3 +21,6 @@ venv/
 
 # ===== 本地工作/个人目录（不入库）=====
 /internship-logs/
+
+# ===== 本地演示/验证临时输出（不入库）=====
+/demo_*.txt

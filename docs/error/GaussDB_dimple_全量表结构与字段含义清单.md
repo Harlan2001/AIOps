@@ -23037,3 +23037,17 @@
 | count | numeric(64,0) | Y |  |  |
 
 ---
+
+## 978. dimple.vw_member_trader_operator　(6 字段)
+> 表含义：会员-客户-交易员关系视图（按交易所代码关联，用于实时接口的交易员反查会员/客户）　|　估算行数：**0**
+
+| 字段名 | 类型 | 可空 | 主键 | 字段含义 |
+|---|---|---|---|---|
+| exch_code | varchar(2) | Y |  | 交易所代码 |
+| member_id | varchar(8) | Y |  | 会员号 |
+| client_id | varchar(16) | Y |  | 客户号 |
+| trader_no | varchar(30) | Y |  | 交易员编号 |
+| user_type | text | Y |  | 用户类型 |
+| if_default | text | Y |  | 是否默认 |
+
+---

@@ -115,3 +115,49 @@ export interface RecordsResponse {
   limit: number
   records: RecordSummary[]
 }
+
+// M2：历史诊断与统计
+
+export interface NameCount {
+  key: string | null
+  count: number
+}
+
+export interface DiagStats {
+  total: number
+  by_date: NameCount[]
+  top_types: NameCount[]
+  by_class: NameCount[]
+  escalated: number
+  abnormal: number
+  abnormal_rate: number
+  annotated: number
+}
+
+export interface DiagLogItem {
+  id: number
+  batch_id?: string | null
+  trigger_type: string
+  input_mode: string
+  source?: string | null
+  business_date?: string | null
+  error_text?: string | null
+  diag_class?: string | null
+  diag_type?: string | null
+  root_cause?: string | null
+  confidence?: number | null
+  diag_path?: string | null
+  escalated: boolean
+  evidence_count: number
+  diag_status: string
+  annot_status?: string | null
+  correct_answer?: string | null
+  annotator?: string | null
+  annotated_at?: string | null
+  created_at?: string | null
+}
+
+export interface DiagListResponse {
+  total: number
+  items: DiagLogItem[]
+}

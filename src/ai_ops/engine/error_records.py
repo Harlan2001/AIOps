@@ -117,12 +117,17 @@ def _table(src, history):
     return "%s.%s" % (SCHEMA, name)
 
 
-def _select(src, columns, history, where=None, params=None, limit=None):
+def _select(src, columns, history, where=None, params=None, limit=None,
+            order_by=None, offset=None):
     sql = "SELECT %s FROM %s" % (", ".join(columns), _table(src, history))
     if where:
         sql += " WHERE " + where
+    if order_by:
+        sql += " ORDER BY " + ", ".join(order_by)
     if limit:
         sql += " LIMIT %d" % int(limit)
+    if offset:
+        sql += " OFFSET %d" % int(offset)
     cols, rows = query(sql, params)
     return [dict(zip(cols, r)) for r in rows]
 
@@ -182,16 +187,36 @@ def get_record(source, key, history=True):
     return _normalize(src, rows[0], history) if rows else None
 
 
-def list_records(source, date, history=True, only_text=True, limit=None):
-    """按日期取某来源的错误记录列表；only_text 仅保留报错文本非空的记录。"""
+def list_records(source, date, history=True, only_text=True, limit=None,
+                 offset=0):
+    """按日期取某来源的错误记录列表；按主键稳定排序，offset 分页。
+
+    only_text 仅保留报错文本非空的记录；稳定 ORDER BY 保证分页不重不漏。
+    """
+    src = SOURCES[source]
+    dc = date_col_of(src, history)
+    kc = key_cols_of(src, history)
+    where = "%s = :date" % dc
+    params = {"date": date}
+    if only_text:
+        where += " AND %s IS NOT NULL" % src.text_col
+    order_by = list(kc)
+    rows = _select(src, _all_cols(src, history), history, where, params,
+                   limit=limit, order_by=order_by, offset=offset)
+    return [_normalize(src, d, history) for d in rows]
+
+
+def count_records(source, date, history=True, only_text=True):
+    """按与 list_records 相同的过滤条件统计总数（只读 COUNT）。"""
     src = SOURCES[source]
     dc = date_col_of(src, history)
     where = "%s = :date" % dc
     params = {"date": date}
     if only_text:
         where += " AND %s IS NOT NULL" % src.text_col
-    rows = _select(src, _all_cols(src, history), history, where, params, limit)
-    return [_normalize(src, d, history) for d in rows]
+    sql = "SELECT COUNT(*) FROM %s WHERE %s" % (_table(src, history), where)
+    cols, rows = query(sql, params)
+    return int(rows[0][0])
 
 
 def list_by_date(date, sources=None, history=True, only_text=True, limit=None):

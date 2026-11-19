@@ -17,6 +17,9 @@ _ENV_PREFIX = {
     "db": "AIOPS_DB_",
     "llm": "AIOPS_LLM_",
     "kb": "AIOPS_KB_",
+    "store": "AIOPS_STORE_",
+    "schedule": "AIOPS_SCHEDULE_",
+    "dimple": "AIOPS_DIMPLE_",
 }
 
 # 允许被环境变量覆盖的字段（值为环境变量后缀，统一大写下划线）
@@ -28,10 +31,22 @@ _OVERRIDES = {
             "allow_escalation": "ALLOW_ESCALATION"},
     "kb": {"enabled": "ENABLED", "kb_root": "ROOT", "audience": "AUDIENCE",
            "baseline": "BASELINE", "top": "TOP", "execute_kb_sql": "EXECUTE_SQL"},
+    "store": {"enabled": "ENABLED", "table": "TABLE"},
+    "schedule": {"enabled": "ENABLED", "cron": "CRON",
+                 "interval_minutes": "INTERVAL_MINUTES",
+                 "lookback_days": "LOOKBACK_DAYS", "batch_size": "BATCH_SIZE"},
+    "dimple": {"enabled": "ENABLED", "base_url": "BASE_URL",
+               "username": "USERNAME", "password": "PASSWORD",
+               "client_id": "CLIENT_ID", "client_secret": "CLIENT_SECRET",
+               "timeout": "TIMEOUT", "interval_minutes": "INTERVAL_MINUTES",
+               "page_size": "PAGE_SIZE", "max_pages": "MAX_PAGES",
+               "recent_keep": "RECENT_KEEP"},
 }
 
 _BOOL = {"enabled", "execute_kb_sql", "allow_escalation"}
-_INT = {"timeout", "top", "port"}
+_INT = {"timeout", "top", "port", "interval_minutes",
+        "lookback_days", "batch_size", "page_size",
+        "max_pages", "recent_keep"}
 
 
 def _coerce(key, value):

@@ -18,6 +18,7 @@ from pathlib import Path
 _DIRS = {
     "config": ("config", "/app/config"),
     "reports": ("var/reports", "/app/reports"),
+    "state": ("var/state", "/app/state"),
 }
 
 
@@ -57,3 +58,13 @@ def config_file(name):
 
 def reports_dir():
     return _dir("reports", env="AIOPS_REPORTS_DIR", create=True)
+
+
+def state_dir():
+    """运行时状态目录（游标/增量位置等，gitignore，不入库）。"""
+    return _dir("state", env="AIOPS_STATE_DIR", create=True)
+
+
+def state_file(name):
+    """状态文件路径，如 state_file('dimple_cursor') -> var/state/dimple_cursor.json。"""
+    return state_dir() / (name + ".json")

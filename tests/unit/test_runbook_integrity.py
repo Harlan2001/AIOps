@@ -44,7 +44,7 @@ def test_registry_yamls_loadable():
 
 def test_types_runbook_mapping_complete(runbooks):
     types = yaml.safe_load((RULES / "errors.yaml").read_text(encoding="utf-8"))["types"]
-    assert len(types) == 20  # 与改造文档声明一致（原 3 → 20）
+    assert len(types) == 25  # 新增撤单/基础数据/初始化/报价参数后 25 类（原 21 → 25）
     missing = [t["id"] for t in types if t.get("runbook") not in runbooks]
     assert missing == [], f"types 引用不存在的 runbook: {missing}"
     # 无多余 runbook：每个文件都必须被某个 type 引用
@@ -184,6 +184,11 @@ def test_sql_bind_params_have_source(runbooks):
         allowed.update((rb.get("extra_params") or {}).keys())
     for t in types:
         allowed.update((t.get("param_alias") or {}).values())
+    # ④ 实时接口端点的业务字段：拉模式采集经 biz_cols 直接注入 params，
+    # 同样是绑定参数的真实来源（如违规委托 runbook 的 :contractId）。
+    from ai_ops.dimple import collector as _dimple_collector
+    for _ep in _dimple_collector.ENDPOINTS.values():
+        allowed.update(_ep.biz_cols)
 
     for rb_id, (fn, rb) in runbooks.items():
         extra = set((rb.get("extra_params") or {}).keys())

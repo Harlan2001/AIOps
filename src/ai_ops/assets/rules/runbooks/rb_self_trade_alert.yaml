@@ -1,34 +1,34 @@
-# 诊断树：自成交次数预警（rule_alarm）
-# 报错形如：已自成交次数/预警阀值 / 自成交次数超限 / 自成交预警
-# 业务含义：同一账户/会员在某个时间窗口内的自成交次数超过了风控配置的预警阈值，
-#           系统发出预警提示（与 ftr_err 的"自成交风险"不同——后者是实时拦截，前者是事后统计预警）。
+# 诊断树：自成交实时预警（Dimple 实时监控 self-deal 接口）
+# 数据形如：同一交易员（buyTrader=sellTrader）在同一合约上既买又卖形成自成交。
+# 业务含义：同一账户在同一合约上的买单与卖单相互撮合，可能是做市/套利的技术性
+#           自成交，也可能构成洗售（wash trade）违规，需结合风控配置判断。
+# 注：实时接口只给交易所+交易员（无会员/客户），member/client 由采集层
+#     经 vw_member_trader_operator 反查后注入，故本 runbook 用简单单表 SQL。
 id: rb_self_trade_alert
-title: 自成交次数预警
+title: 自成交实时预警
 steps:
   - id: self_trade_threshold
     type: sql_check
-    title: 自成交预警阈值配置
+    title: 自成交风控阈值配置（会员专属，缺失则回退全局默认）
     primary: true
     expect: {exists: true}
-    # 原 tc_self_trade_config 在 GaussDB 清单中不存在，改查报价风控参数表 tc_quote_risk_config；
-    # 自成交预警对应的 risk_type(字典409) 取值需业务确认
-    sql: "SELECT member_id, client_id, contract_id, risk_type, numbers_limit, duration_limit, if_valid FROM dimple.tc_quote_risk_config WHERE member_id = :member AND client_id = :client"
+    # 该会员无专属配置时回退 member_id=' '（空格）的全局默认，证明有默认阈值生效。
+    sql: "SELECT member_id, client_id, contract_id, risk_type, numbers_limit, duration_limit, if_valid FROM dimple.tc_quote_risk_config WHERE member_id = :member OR member_id = ' '"
     on_fail:
-      root: "未配置自成交预警阈值：会员 {member} 客户 {client} 在风控参数表无记录（系统使用全局默认阈值）"
+      root: "自成交风控配置缺失：会员 {member} 在风控参数表既无专属配置也无全局默认，系统未对自成交设限"
       action:
-        - "在【自成交监控配置】中为该会员/客户设置预警阈值和拦截阈值"
+        - "在【自成交监控配置】中补全全局默认阈值，再为相关会员设置专属预警/拦截阈值"
 
   - id: self_trade_stat
     type: sql_query
-    title: 近期自成交相关报警（旁证，看次数与趋势）
-    # 原 tc_self_trade_stat 不存在，改查报警历史表 tc_his_alarm_note 中"自成交"类内容
+    title: 该会员近期自成交相关报警（旁证，看次数与趋势）
     sql: "SELECT alarm_date, alarm_type, member_id, variety_id, alarm_note FROM dimple.tc_his_alarm_note WHERE member_id = :member AND alarm_note LIKE '%自成交%' ORDER BY alarm_date DESC, seq_no DESC LIMIT 10"
 
 default:
-  root: "自成交次数预警：会员 {member} 客户 {client} 在统计窗口内的自成交次数已达预警阈值。需确认是否为策略正常对冲（做市/套利）产生的技术性自成交，还是真正的洗售（wash trade）违规"
+  root: "自成交实时预警：会员 {member} 在合约上形成自成交。需确认是否为做市/套利策略的技术性自成交，还是真正的洗售（wash trade）违规"
   action:
-    - "核对自成交明细记录，确认每次自成交的合约、方向、时间间隔"
-    - "如为做市商策略的正常双边报价成交（买卖均被对手方击中），申请自成交豁免/白名单"
-    - "如为套利策略两条腿误配到同一账户，分账户执行或加策略隔离标识"
+    - "核对自成交明细，确认合约、买卖方向、成交时间间隔与价格"
+    - "如为做市商双边报价被同一对手方击中，申请自成交豁免/白名单"
+    - "如为套利两腿误配到同一账户，分账户执行或加策略隔离标识"
     - "如为真实洗售嫌疑，暂停相关策略并上报合规"
-    - "调整做市策略的报价逻辑，避免买卖报价同时被同一对手方成交"
+    - "调整做市报价逻辑，避免买卖报价同时被同一对手方成交"

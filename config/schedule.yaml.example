@@ -1,0 +1,24 @@
+# 定时巡检配置模板（方向一·阶段 1，方案 A：进程内调度）
+# 用法：复制本文件为 schedule.yaml，按需修改；schedule.yaml 不入库，由部署方注入。
+#   copy config\schedule.yaml.example config\schedule.yaml
+#
+# enabled：巡检总开关。
+#   false（默认）：不启动调度，服务行为与现状一致，不额外访问数据库；
+#   true：FastAPI 启动时在进程内创建 APScheduler，按 interval_minutes 定时巡检。
+# 也可用环境变量 AIOPS_SCHEDULE_* 覆盖。
+enabled: false
+
+# 巡检间隔（分钟）。两种触发方式二选一：
+#   interval_minutes：固定间隔（推荐，简单确定）；
+#   cron：标准 5 段 cron 表达式（如盘后 "0 18 * * *"），配置 cron 时优先使用。
+interval_minutes: 120
+cron: ""
+
+# 巡检来源列表；留空 = 全部 7 个来源。
+sources: []
+
+# 扫描最近 N 个业务日期（含当天）。
+lookback_days: 1
+
+# 每个来源单次取数上限，受服务端 MAX_BATCH=200 硬上限约束（取更小值）。
+batch_size: 200

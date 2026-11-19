@@ -10,6 +10,9 @@ requires-python = ">=3.12"
 dependencies = [
     "py-opengauss>=1.3.11",
     "pyyaml>=6.0.3",
+    # 顶层 ai_ops.api -> scheduler.runner 会导入 apscheduler；核心环境
+    # （uv sync 后直接 pytest）也需可见，故放主依赖而非 api extra。
+    "apscheduler>=3.10",
 ]
 
 [project.optional-dependencies]

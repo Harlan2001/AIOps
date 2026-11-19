@@ -22,6 +22,18 @@ const router = createRouter({
       component: () => import('@/views/dashboard/DashboardView.vue'),
       meta: { title: '管理看板' },
     },
+    {
+      path: '/history',
+      name: 'history',
+      component: () => import('@/views/history/HistoryView.vue'),
+      meta: { title: '历史诊断' },
+    },
+    {
+      path: '/realtime',
+      name: 'realtime',
+      component: () => import('@/views/realtime/RealtimeView.vue'),
+      meta: { title: '实时监控' },
+    },
   ],
 })
 
