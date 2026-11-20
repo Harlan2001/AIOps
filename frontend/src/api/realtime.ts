@@ -2,12 +2,18 @@ import { getDiagnoses, getDiagnosisDetail } from './diagnoses'
 import type { DiagListResponse, DiagLogItem } from '@/types/contract'
 
 // 拉取 Dimple 各实时来源的诊断结果（落库后经 /v1/diagnoses 读取，按 id 倒序）。
-// 当前落库记录均为 Dimple 实时来源，故不按单一 source 过滤，统一展示全部。
+// anomalyOnly=true（默认）：只看真实异常；false：含行情/持仓等业务数据的全部记录。
 export function getRealtimeAlarms(
   offset = 0,
   limit = 20,
+  anomalyOnly = true,
 ): Promise<DiagListResponse> {
-  return getDiagnoses({ offset, limit })
+  return getDiagnoses({
+    offset,
+    limit,
+    anomaly_only: anomalyOnly,
+    dimple_only: true,
+  })
 }
 
 // 单条实时预警详情（含完整结果快照）。

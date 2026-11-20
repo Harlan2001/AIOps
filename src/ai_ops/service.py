@@ -163,6 +163,10 @@ class DiagnosticService:
         self._persist(rec, out, _ctx)
         return out
 
+    def diagnose_escalated_ephemeral(self, rec):
+        """已有日志详情的临时升级预览：不新增诊断事件、不改写原日志。"""
+        return self._escalated_core(rec)
+
     def diagnose(self, rec):
         """兼容入口：等价于默认纯规则路径。"""
         return self.diagnose_rule_only(rec)

@@ -10,6 +10,7 @@
 """
 from contextlib import asynccontextmanager
 from datetime import datetime
+import json
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
@@ -312,14 +313,21 @@ def diagnosis_list(request: Request, source: str | None = None,
                    diag_class: str | None = None, diag_type: str | None = None,
                    annot_status: str | None = None,
                    start_date: str | None = None, end_date: str | None = None,
+                   anomaly_only: bool = False, dimple_only: bool = False,
                    offset: int = 0, limit: int = 50):
-    """分页查询历史诊断（支持来源/类型/分类/标注/日期筛选）。"""
+    """分页查询历史诊断（支持来源/类型/分类/标注/日期筛选）。
+
+    anomaly_only=True：只返回真实异常（排除行情/持仓/资金等业务数据）。
+    dimple_only=True：仅返回 Dimple 来源；两者供实时监控页组合使用，
+    历史页均不传，默认查看全部。
+    """
     try:
         return diag_repo.list_logs(
             source=source, diag_class=diag_class, diag_type=diag_type,
             annot_status=annot_status, start_date=start_date,
             end_date=end_date, offset=max(0, offset),
-            limit=max(1, min(limit, 200)))
+            limit=max(1, min(limit, 200)),
+            exclude_business=anomaly_only, dimple_only=dimple_only)
     except HTTPException:
         raise
     except Exception as e:  # noqa: BLE001
@@ -338,6 +346,57 @@ def diagnosis_detail(log_id: int, request: Request):
     if row is None:
         raise HTTPException(404, "诊断记录不存在：%s" % log_id)
     return row
+
+
+def _json_dict(raw):
+    """读取日志中的 JSON 对象；历史脏数据/空值统一降级为空 dict。"""
+    if isinstance(raw, dict):
+        return raw
+    try:
+        value = json.loads(raw or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _record_from_log(row):
+    """从已有日志重建诊断输入，并恢复原快照中的采集/反查参数。"""
+    snapshot = _json_dict(row.get("result_json"))
+    rule_res = snapshot.get("rule_res")
+    params = rule_res.get("params") if isinstance(rule_res, dict) else None
+    rec = {
+        "text": row.get("error_text") or "",
+        "ldate": row.get("business_date") or "",
+        "errcode": row.get("error_code") or 0,
+        "lsection": "",
+        "source": row.get("source") or "",
+        "key": _json_dict(row.get("key_json")),
+    }
+    if isinstance(params, dict):
+        rec["params"] = params
+    return rec
+
+
+@app.post("/v1/diagnoses/{log_id}/escalate", response_model=DiagnosisResultModel)
+def diagnosis_escalate(log_id: int, request: Request):
+    """已有日志的按需升级预览，不新增手工诊断事件、不覆盖原始日志。"""
+    svc = get_service(request)
+    if not svc.escalation_allowed():
+        raise HTTPException(
+            409, "当前部署未启用 LLM 升级能力（config/llm.yaml allow_escalation=false），"
+                 "拒绝升级；如需升级请由部署方开启允许位")
+    try:
+        row = diag_repo.get_log(log_id)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        _store_unavailable(e)
+    if row is None:
+        raise HTTPException(404, "诊断记录不存在：%s" % log_id)
+    rec = _record_from_log(row)
+    if not rec["text"].strip():
+        raise HTTPException(422, "日志 %s 的报错文本为空，无法升级诊断" % log_id)
+    return svc.diagnose_escalated_ephemeral(rec)
 
 
 class AnnotationRequest(BaseModel):

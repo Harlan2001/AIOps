@@ -21,6 +21,48 @@ from . import connection
 DEFAULT_TABLE = "aiops_diag_log"
 _WS_RE = re.compile(r"\s+")
 
+# 正常业务数据来源（行情/持仓/资金/库存/委托/成交/申报等），不是异常。
+# 口径须与 dimple.collector.BUSINESS_ENDPOINTS 保持一致；store 层不反向导入
+# collector 以避免循环依赖，故在此独立声明。这些 id 均为内部固定常量，
+# 可安全内联进 SQL（无注入风险）。
+BUSINESS_SOURCES = {
+    "dimple_trader_order", "dimple_member_order",
+    "dimple_real_time_quot", "dimple_real_time_arbi_quot",
+    "dimple_integrate_posi", "dimple_trade_purpose_posi",
+    "dimple_member_hold", "dimple_self_run_trader_hold",
+    "dimple_rfq_posi",
+    "dimple_fund_realtime", "dimple_estimate_account_remain",
+    "dimple_member_inventory", "dimple_self_run_trader_stock",
+    "dimple_estimate_storage_remain", "dimple_client_storage_flow",
+    "dimple_self_run_trader_deal", "dimple_member_transaction",
+    "dimple_rfq_match", "dimple_rfq_uncheck_match",
+    "dimple_defer_fee_rate", "dimple_member_qty_weight_limit",
+    "dimple_trader_qty_weight_limit",
+    "dimple_option_exec", "dimple_self_hedging",
+    "dimple_trader_delivery_declare",
+    "dimple_trader_delivery_declare_trade",
+    "dimple_rfq_default_declaration",
+}
+
+
+# 额度与限额 ifOver 表示"超限/成立"的取值；采集层与历史查询共用同一口径。
+QUOTA_OVER_TOKENS = {"1", "1.0", "true", "y", "yes", "是", "超限"}
+
+
+def _anomaly_cond():
+    """返回"仅真实异常"的 SQL 片段：
+      1) 排除业务数据来源（行情/持仓/资金/库存等）；
+      2) 额度限额按 ifOver 渲染值做真值白名单过滤，与采集层保持一致；
+    source 为空的早期演示数据保留。不物理删除，业务数据仍可回溯。"""
+    in_list = ", ".join("'%s'" % s for s in sorted(BUSINESS_SOURCES))
+    quota_over = " OR ".join(
+        "LOWER(TRIM(error_text)) LIKE '%%是否超限 %s'" % token
+        for token in sorted(QUOTA_OVER_TOKENS))
+    return (
+        "(source IS NULL OR source NOT IN (%s)) "
+        "AND (source IS NULL OR source <> 'dimple_quota_and_limit' "
+        "OR (%s))" % (in_list, quota_over))
+
 
 def _json_default(o):
     """JSON 兜底：GaussDB NUMERIC 返回 Decimal，时间字段返回 datetime/date。"""
@@ -168,10 +210,19 @@ def _rows_to_dicts(cols, rows):
 
 def list_logs(table=None, source=None, diag_class=None, diag_type=None,
               annot_status=None, start_date=None, end_date=None,
-              offset=0, limit=50):
-    """按条件分页查询历史诊断（按 id 倒序），返回 {total, items}。"""
+              offset=0, limit=50, exclude_business=False, dimple_only=False):
+    """按条件分页查询历史诊断（按 id 倒序），返回 {total, items}。
+
+    exclude_business=True：叠加"仅真实异常"过滤，排除业务数据与未超限记录。
+    dimple_only=True：仅查询 Dimple 来源，避免手工/历史巡检记录混入实时页。
+    历史页两个开关默认均为 False，可查看全部落库记录。
+    """
     table = table or load_table()
     where, params = [], {}
+    if dimple_only:
+        where.append("SUBSTR(source, 1, 7) = 'dimple_'")
+    if exclude_business:
+        where.append(_anomaly_cond())
 
     def add(cond, name, value):
         key = name
@@ -201,7 +252,8 @@ def list_logs(table=None, source=None, diag_class=None, diag_type=None,
     qparams["limit"] = max(1, min(int(limit), 200))
     cols_sql = ", ".join(_LIST_COLS)
     list_sql = (
-        "SELECT %s FROM %s%s ORDER BY id DESC LIMIT :limit OFFSET :offset"
+        "SELECT %s FROM %s%s ORDER BY created_at DESC, id DESC "
+        "LIMIT :limit OFFSET :offset"
         % (cols_sql, table, where_sql))
     cols, rows = connection.execute_select(list_sql, qparams)
     return {"total": total, "items": _rows_to_dicts(cols, rows)}
@@ -240,14 +292,15 @@ def stats(table=None, start_date=None, end_date=None, top_n=10):
     避免并发写入导致分类合计与 total 不一致、异常率越界。
     """
     table = table or load_table()
-    where, params = [], {}
+    # 基础条件始终包含"仅真实异常"过滤，业务数据不进任何统计口径。
+    where, params = [_anomaly_cond()], {}
     if start_date:
         where.append("business_date >= :start_date")
         params["start_date"] = start_date
     if end_date:
         where.append("business_date <= :end_date")
         params["end_date"] = end_date
-    base_where = (" WHERE " + " AND ".join(where)) if where else ""
+    base_where = " WHERE " + " AND ".join(where)
 
     def filter_sql(extra):
         # 已有过滤条件时用 AND 追加；否则以 WHERE 起头。
