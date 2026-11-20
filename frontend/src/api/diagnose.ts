@@ -1,5 +1,4 @@
 import { http } from './client'
-import type { AxiosRequestConfig } from 'axios'
 import type { BatchResponse, DiagnosisResult } from '@/types/contract'
 
 export interface DiagnosePayload {
@@ -12,9 +11,9 @@ export interface DiagnosePayload {
   escalate?: boolean
 }
 
-export function diagnose(payload: DiagnosePayload, config?: AxiosRequestConfig) {
+export function diagnose(payload: DiagnosePayload) {
   return http
-    .post<DiagnosisResult>('/v1/diagnose', payload, config)
+    .post<DiagnosisResult>('/v1/diagnose', payload)
     .then((res) => res.data)
 }
 

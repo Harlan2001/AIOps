@@ -2,10 +2,8 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 
 import { getRealtimeAlarms, getRealtimeDetail } from '@/api/realtime'
-import { diagnose } from '@/api/diagnose'
 import { ApiError } from '@/api/client'
 import type {
-  Answer,
   DiagLogItem,
   DiagnosisResult,
   EvidenceRow,
@@ -13,6 +11,7 @@ import type {
 import { labelNull } from '@/utils/label'
 import { REALTIME_SOURCE_LABELS } from '@/constants/sources'
 import { Empty } from 'ant-design-vue'
+import { useRealtimeLlm } from './useRealtimeLlm'
 
 const simpleImage = Empty.PRESENTED_IMAGE_SIMPLE
 
@@ -65,19 +64,26 @@ const drawerOpen = ref(false)
 const detail = ref<DiagLogItem | null>(null)
 const detailLoading = ref(false)
 
-// AI 大模型按需诊断（默认关闭，不耗 token；打开开关才调用一次 LLM）
-const llmEnabled = ref(false)
-const llmLoading = ref(false)
-const llmAnswer = ref<Answer | null>(null)
-const llmError = ref('')
-const LLM_TIMEOUT = 180000
+// AI 大模型按需诊断（默认关闭；请求隔离与降级展示由组合式函数统一管理）
+const {
+  llmEnabled,
+  llmLoading,
+  llmAnswer,
+  llmError,
+  llmNotice,
+  onLlmToggle,
+  resetLlm,
+} = useRealtimeLlm(detail)
 
 onMounted(() => {
   load()
   startTimer()
 })
 
-onBeforeUnmount(() => stopTimer())
+onBeforeUnmount(() => {
+  stopTimer()
+  resetLlm()
+})
 
 async function load() {
   loading.value = true
@@ -155,49 +161,6 @@ async function openDetail(record: DiagLogItem) {
   }
 }
 
-function resetLlm() {
-  llmEnabled.value = false
-  llmLoading.value = false
-  llmAnswer.value = null
-  llmError.value = ''
-}
-
-// 开关变化：关闭则清空；打开则调用大模型对当前这条报错做一次升级诊断。
-async function onLlmToggle(enabled: boolean) {
-  llmEnabled.value = enabled
-  if (!enabled) {
-    llmAnswer.value = null
-    llmError.value = ''
-    return
-  }
-  if (!detail.value) return
-  llmLoading.value = true
-  llmError.value = ''
-  llmAnswer.value = null
-  try {
-    const res: DiagnosisResult = await diagnose(
-      {
-        text: detail.value.error_text ?? '',
-        ldate: detail.value.business_date ?? '',
-        escalate: true,
-      },
-      { timeout: LLM_TIMEOUT },
-    )
-    llmAnswer.value = res.answer
-    if (!res.answer) llmError.value = '大模型未返回有效结论（可能已降级为规则结果）'
-  } catch (e) {
-    llmEnabled.value = false
-    llmError.value =
-      e instanceof ApiError
-        ? e.status === 409
-          ? '当前部署未开启大模型升级（allow_escalation=false）'
-          : `大模型调用失败（${e.status}）：${e.message}`
-        : '大模型调用异常，请稍后重试'
-  } finally {
-    llmLoading.value = false
-  }
-}
-
 // 解析详情里的完整诊断快照（含根因、处理建议、取证证据）。
 const parsed = computed<DiagnosisResult | null>(() => {
   if (!detail.value?.result_json) return null
@@ -231,6 +194,13 @@ function evidenceData(ev: EvidenceRow) {
     })
     return obj
   })
+}
+
+function evidenceRowKey(
+  _record: Record<string, unknown>,
+  index: number,
+): string {
+  return String(index)
 }
 
 function fmtConf(v: number | null | undefined): string {
@@ -435,7 +405,7 @@ function fmtConf(v: number | null | undefined): string {
               :data-source="evidenceData(ev)"
               :pagination="false"
               :scroll="{ x: 'max-content' }"
-              row-key="(record, idx) => String(idx)"
+              :row-key="evidenceRowKey"
             />
           </div>
         </div>
@@ -456,6 +426,13 @@ function fmtConf(v: number | null | undefined): string {
           </div>
 
           <a-spin :spinning="llmLoading" tip="大模型分析中…">
+            <a-alert
+              v-if="llmNotice"
+              type="info"
+              show-icon
+              :message="llmNotice"
+              class="llm-error"
+            />
             <a-alert
               v-if="llmError"
               type="error"

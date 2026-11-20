@@ -8,7 +8,12 @@ export function getRealtimeAlarms(
   limit = 20,
   anomalyOnly = true,
 ): Promise<DiagListResponse> {
-  return getDiagnoses({ offset, limit, anomaly_only: anomalyOnly })
+  return getDiagnoses({
+    offset,
+    limit,
+    anomaly_only: anomalyOnly,
+    dimple_only: true,
+  })
 }
 
 // 单条实时预警详情（含完整结果快照）。

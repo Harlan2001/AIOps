@@ -133,6 +133,17 @@ def test_diagnose_escalate_llm_unavailable_graceful_200(client, svc, monkeypatch
     assert body["answer"]["root"]
 
 
+def test_ephemeral_escalation_never_persists(svc, monkeypatch):
+    expected = {"text": "x", "answer": {"root": "LLM"}, "escalated": True}
+    monkeypatch.setattr(svc, "_escalated_core", lambda rec: expected)
+
+    def forbidden_persist(*args):
+        raise AssertionError("临时升级预览不得落库")
+
+    monkeypatch.setattr(svc, "_persist", forbidden_persist)
+    assert svc.diagnose_escalated_ephemeral({"text": "x"}) is expected
+
+
 def test_diagnose_escalate_disabled_409(client, svc, monkeypatch):
     """部署未允许升级：escalate=true 直接 409，可审计、不静默。"""
     monkeypatch.setattr(svc, "escalation_allowed", lambda: False)
