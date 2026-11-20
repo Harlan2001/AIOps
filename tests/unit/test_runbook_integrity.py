@@ -44,7 +44,7 @@ def test_registry_yamls_loadable():
 
 def test_types_runbook_mapping_complete(runbooks):
     types = yaml.safe_load((RULES / "errors.yaml").read_text(encoding="utf-8"))["types"]
-    assert len(types) == 21  # 新增违规委托后 21 类（原 20 → 21）
+    assert len(types) == 25  # 新增撤单/基础数据/初始化/报价参数后 25 类（原 21 → 25）
     missing = [t["id"] for t in types if t.get("runbook") not in runbooks]
     assert missing == [], f"types 引用不存在的 runbook: {missing}"
     # 无多余 runbook：每个文件都必须被某个 type 引用
