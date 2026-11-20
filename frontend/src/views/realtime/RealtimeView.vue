@@ -241,10 +241,7 @@ function fmtConf(v: number | null | undefined): string {
 <template>
   <a-card>
     <template #title>
-      <a-space>
-        <span>Dimple 实时监控</span>
-        <a-tag color="processing">合规预警 / 自成交 / 违规委托</a-tag>
-      </a-space>
+      <a-tag color="processing">合规预警 / 自成交 / 违规委托</a-tag>
     </template>
     <template #extra>
       <a-space>

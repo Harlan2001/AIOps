@@ -24,7 +24,7 @@ steps:
     title: 当日结算价/昨结价检查
     primary: true
     expect: {exists: true}
-    sql: "SELECT trade_date, contract_id, last_clear_price, clear_price FROM dimple.tc_clear_price WHERE trade_date = :trade_date AND contract_id = :contract"
+    sql: "SELECT trade_date, contract_id, last_clear_price, clear_price FROM dimple.tc_clear_price WHERE trade_date = :trade_date AND contract_id = ANY(string_to_array(:contract, '-'))"
     on_fail:
       root: "{contract} 在 {trade_date} 的结算价尚未生成（闭市后处理未执行/失败，或当日行情缺失）"
       action:
@@ -35,7 +35,7 @@ steps:
   - id: recent_price
     type: sql_query
     title: 近期结算价（旁证，看价格波动趋势）
-    sql: "SELECT trade_date, contract_id, clear_price, last_clear_price FROM dimple.tc_clear_price WHERE contract_id = :contract ORDER BY trade_date DESC LIMIT 5"
+    sql: "SELECT trade_date, contract_id, clear_price, last_clear_price FROM dimple.tc_clear_price WHERE contract_id = ANY(string_to_array(:contract, '-')) ORDER BY trade_date DESC LIMIT 5"
 
 default:
   root: "委托价格超出涨停板：{contract} 当日结算价/昨结价已存在，委托价 {order_price} 超出交易所允许的涨跌停范围（涨跌停价请以行情/交易所公告为准），属于录入价格错误或行情剧烈波动"

@@ -242,7 +242,7 @@ def list_logs(table=None, source=None, diag_class=None, diag_type=None,
     qparams["limit"] = max(1, min(int(limit), 200))
     cols_sql = ", ".join(_LIST_COLS)
     list_sql = (
-        "SELECT %s FROM %s%s ORDER BY created_at DESC, id DESC "
+        "SELECT %s FROM %s%s ORDER BY business_date DESC NULLS LAST, id DESC "
         "LIMIT :limit OFFSET :offset"
         % (cols_sql, table, where_sql))
     cols, rows = connection.execute_select(list_sql, qparams)

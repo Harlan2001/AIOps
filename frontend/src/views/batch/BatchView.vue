@@ -96,7 +96,7 @@ async function run() {
 </script>
 
 <template>
-  <a-card title="批量回放">
+  <a-card>
     <a-row :gutter="16" align="middle">
       <a-col :span="8">
         <a-select v-model:value="source" style="width: 100%">

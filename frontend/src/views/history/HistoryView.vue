@@ -174,7 +174,7 @@ async function submitAnnot() {
 </script>
 
 <template>
-  <a-card title="历史诊断">
+  <a-card>
     <a-row :gutter="12" align="bottom">
       <a-col :span="4">
         <p class="flabel">来源</p>

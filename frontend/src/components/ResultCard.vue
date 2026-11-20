@@ -82,6 +82,8 @@ function evidenceRows(
     <h4>问题是什么</h4>
     <p>{{ answer?.root }}</p>
     <a-tag color="blue">置信度 {{ answer?.confidence }}</a-tag>
+    <a-tag v-if="answer?.match_kind === 'synonym'" color="cyan">口语化语义召回</a-tag>
+    <a-tag v-else-if="answer?.match_kind === 'fuzzy'" color="orange">模糊匹配·建议复核</a-tag>
     <p v-if="answer?.evidence_note" class="note">{{ answer.evidence_note }}</p>
   </div>
 

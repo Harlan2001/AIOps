@@ -61,6 +61,8 @@ class AnswerModel(BaseModel):
     confidence: float | None = None
     secondary: list[dict] = []
     evidence_note: str | None = None
+    # 语义召回方式：keyword 精确 / synonym 口语同义词 / fuzzy 字符模糊（默认 None）
+    match_kind: str | None = None
 
 
 class DiagnosisResultModel(BaseModel):

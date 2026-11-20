@@ -6,6 +6,8 @@ export interface Answer {
   confidence?: number | null
   secondary: Array<Record<string, unknown>>
   evidence_note?: string | null
+  // 语义召回方式：keyword 精确 / synonym 口语同义词 / fuzzy 字符模糊
+  match_kind?: string | null
 }
 
 export interface EvidenceRow {
