@@ -10,7 +10,6 @@ from ai_ops.engine.db import DatabaseUnavailable
 from ai_ops.engine.rule_engine import Engine
 from ai_ops.service import MAX_BATCH, DiagnosticService
 
-
 # ---------- 通用 FakeDB ----------
 
 
@@ -223,6 +222,7 @@ def test_b10_self_trade_tie_routing(eng, text, expect_id):
 @pytest.fixture
 def client():
     from fastapi.testclient import TestClient
+
     from ai_ops.api import app
     with TestClient(app) as c:
         yield c

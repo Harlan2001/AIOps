@@ -4,7 +4,6 @@ import pytest
 
 from ai_ops import evidence, paths, reporting
 
-
 # ---------- paths ----------
 
 def test_paths_layout():

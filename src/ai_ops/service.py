@@ -14,9 +14,9 @@ D1 方案 C 的两条诊断路径（响应统一为 contract.DiagnosisResult 形
 组件：Engine / KnowledgeClient / LLMClient 默认自建，可注入复用。
 取数委托 ai_ops.engine.error_records（GaussDB 7 张错误历史表）。
 """
+import time
 from datetime import datetime
 from socket import create_connection
-import time
 
 from ai_ops import pipeline
 from ai_ops.config import load_config

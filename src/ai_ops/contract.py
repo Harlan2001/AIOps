@@ -13,7 +13,7 @@ Engine 内部 dict（如 action 字段）不得直接透传到产品层，重命
 """
 from __future__ import annotations
 
-from typing import Any, List, Optional, TypedDict
+from typing import List, Optional, TypedDict
 
 
 class DiagnosisRecord(TypedDict, total=False):

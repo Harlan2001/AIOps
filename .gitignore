@@ -19,6 +19,13 @@ __pycache__/
 .venv/
 venv/
 
+# ===== 测试覆盖率与质量工具缓存 =====
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.ruff_cache/
+
 # ===== 本地工作/个人目录（不入库）=====
 /internship-logs/
 

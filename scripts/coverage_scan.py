@@ -15,7 +15,7 @@ import 本模块不再连库/执行，仅在显式运行（__main__）时统计�
 from collections import defaultdict
 
 from ai_ops.engine.db import query
-from ai_ops.engine.error_records import SOURCES, SCHEMA
+from ai_ops.engine.error_records import SCHEMA, SOURCES
 from ai_ops.engine.parser import normalize_skeleton
 from ai_ops.rules_store import load_registries
 

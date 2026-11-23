@@ -17,6 +17,7 @@ jobs:
   test:
     name: test (${{ matrix.name }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -24,9 +25,12 @@ jobs:
           # 核心环境：只装运行时依赖（py-opengauss + pyyaml），不应依赖任何 extra
           - name: core-no-extras
             sync-args: ""
+            coverage-args: ""
           # 服务化环境：装 api extra（fastapi/uvicorn/pydantic/pymysql）
+          # 同时产出覆盖率，避免为质量报告重复执行整套测试。
           - name: api-extra
             sync-args: "--extra api"
+            coverage-args: "--cov=src/ai_ops --cov-report=term-missing --cov-report=xml"
     steps:
       - uses: actions/checkout@v4
 
@@ -37,14 +41,89 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync ${{ matrix.sync-args }}
+        run: uv sync --locked ${{ matrix.sync-args }}
 
       - name: Run pytest
-        run: uv run pytest
+        run: uv run --no-sync pytest ${{ matrix.coverage-args }}
+
+      - name: Upload backend coverage
+        if: matrix.name == 'api-extra'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-xml
+          path: coverage.xml
+          if-no-files-found: error
+          retention-days: 7
+
+  quality-backend:
+    name: quality-backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run Ruff
+        run: uv run --no-sync ruff check .
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      # build 已包含 vue-tsc --noEmit，不重复执行类型检查。
+      - name: Build production assets
+        run: npm run build
+
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload frontend coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+          if-no-files-found: error
+          retention-days: 7
 
   wheel-build-smoke:
     name: wheel-build-smoke
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 

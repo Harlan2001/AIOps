@@ -113,7 +113,6 @@ class PagedService:
 
 
 def test_today_uses_today_table_and_paginates(monkeypatch):
-    from datetime import datetime
     cfg = dict(_ENABLED, batch_size=2, max_scan_per_source=5000)
     monkeypatch.setattr(inspector, "load_schedule", lambda: cfg)
     fake = PagedService(total=5)
