@@ -3,7 +3,13 @@ import { createRouter, createWebHistory } from 'vue-router'
 const router = createRouter({
   history: createWebHistory('/'),
   routes: [
-    { path: '/', redirect: '/diagnose' },
+    { path: '/', redirect: '/dashboard' },
+    {
+      path: '/dashboard',
+      name: 'dashboard',
+      component: () => import('@/views/dashboard/DashboardView.vue'),
+      meta: { title: '运维总览' },
+    },
     {
       path: '/diagnose',
       name: 'diagnose',
@@ -17,10 +23,10 @@ const router = createRouter({
       meta: { title: '批量回放' },
     },
     {
-      path: '/dashboard',
-      name: 'dashboard',
-      component: () => import('@/views/dashboard/DashboardView.vue'),
-      meta: { title: '管理看板' },
+      path: '/realtime',
+      name: 'realtime',
+      component: () => import('@/views/realtime/RealtimeView.vue'),
+      meta: { title: '实时异常' },
     },
     {
       path: '/history',
@@ -29,12 +35,28 @@ const router = createRouter({
       meta: { title: '历史诊断' },
     },
     {
-      path: '/realtime',
-      name: 'realtime',
-      component: () => import('@/views/realtime/RealtimeView.vue'),
-      meta: { title: '实时监控' },
+      path: '/route-error',
+      name: 'route-error',
+      component: () => import('@/views/system/NotFoundView.vue'),
+      meta: { title: '页面加载失败' },
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('@/views/system/NotFoundView.vue'),
+      meta: { title: '页面不存在' },
     },
   ],
+})
+
+router.afterEach((to) => {
+  document.title = `${String(to.meta.title ?? '工作台')} · DIMPLE AIOps`
+})
+
+router.onError(() => {
+  if (router.currentRoute.value.name !== 'route-error') {
+    void router.replace({ name: 'route-error' })
+  }
 })
 
 export default router

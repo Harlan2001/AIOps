@@ -9,6 +9,8 @@ interface HealthState {
   error: string
 }
 
+let refreshGeneration = 0
+
 export const useHealthStore = defineStore('health', {
   state: (): HealthState => ({
     data: null,
@@ -20,14 +22,18 @@ export const useHealthStore = defineStore('health', {
   },
   actions: {
     async refresh() {
+      const requestGeneration = ++refreshGeneration
       this.loading = true
       this.error = ''
       try {
-        this.data = await getHealth()
+        const data = await getHealth()
+        if (requestGeneration !== refreshGeneration) return
+        this.data = data
       } catch (e) {
+        if (requestGeneration !== refreshGeneration) return
         this.error = e instanceof Error ? e.message : String(e)
       } finally {
-        this.loading = false
+        if (requestGeneration === refreshGeneration) this.loading = false
       }
     },
   },
