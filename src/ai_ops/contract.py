@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """诊断内核的稳定契约：diagnose(record) -> DiagnosisResult。
 
-产品层（FastAPI / 调度 / worker / Streamlit）只允许依赖本契约与 ai_ops.pipeline，
+产品层（FastAPI / 调度 / worker）只允许依赖本契约与 ai_ops.pipeline，
 不得反向要求内核感知接口、ORM 或前端。D1 方案 C 落地后，HTTP 侧有两条路径，
 但响应统一为本文件定义的 DiagnosisResult 形状：
   - 默认纯规则：service.diagnose_rule_only 用轻量适配器把 Engine 结果映射成本结构，

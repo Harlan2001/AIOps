@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""诊断服务层（阶段 2·① / D1 方案 C）：把业务逻辑从 Streamlit 页面收敛到独立模块。
+"""诊断服务层（阶段 2·① / D1 方案 C）：为 CLI 与 HTTP API 提供统一业务编排。
 
 定位：
-  - 纯 Python，零 UI 依赖（不 import streamlit）；
-  - 页面（demo/app.py）、CLI 与 FastAPI 共用同一服务面；
+  - 纯 Python，零 UI 依赖；
+  - CLI 与 FastAPI 共用同一服务面，Vue 工作台通过 HTTP API 访问；
   - 只做编排，不改诊断逻辑。
 
 D1 方案 C 的两条诊断路径（响应统一为 contract.DiagnosisResult 形状）：
