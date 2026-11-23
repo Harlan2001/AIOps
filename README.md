@@ -102,7 +102,11 @@ uv run ai-ops --source ftr_err --date 20261030             # 按来源/日期取
 uv run ai-ops --text "..." --force-llm                    # 强制 LLM 兜底
 uv run ai-ops --rule --text "[合约=>Au9999]结算价不存在"     # 纯规则模式
 uv run ai-ops --source ftr_err --date 20261030 --limit 500 # 批量回放（尾部输出降本率观测行）
-uv run pytest                                              # 77 项单元 + 集成测试（离线可跑）
+uv run ruff check .                                        # Python 静态检查
+uv run pytest --cov=src/ai_ops --cov-report=term-missing   # 127 项测试 + 覆盖率门禁（离线可跑）
+npm --prefix frontend run lint                             # 前端 ESLint
+npm --prefix frontend run test:coverage                    # 前端 Vitest + 覆盖率门禁
+npm --prefix frontend run build                            # TypeScript 检查 + 生产构建
 
 # API 服务（uvicorn 单进程起步）
 uvicorn ai_ops.api:app --host 0.0.0.0 --port 8000
@@ -119,7 +123,7 @@ uv run python scripts/coverage_scan.py
 - 核心错误表：**ftr_err 99.6%**、**quote_err 99.5%**；报警类表 alarm/quote_alarm/rule_alarm **≈100%**；
 - 规则命中的报错走快速路径**零 token**；HTTP 默认纯规则，仅显式 `escalate=true` 且部署允许时才可能产生 LLM 调用；
 - 覆盖率口径：按 TOP5000 高频骨架 + 长尾表全量 SQL LIKE 复核（此前 TOP200 抽样会低估 alarm 表）。
-- 离线回归基线：77/77 测试全绿（含 runbook 与 977 表结构一致性 fail-fast 防线）。
+- 离线回归基线：127/127 测试全绿（含 runbook 与 977 表结构一致性 fail-fast 防线）。
 
 ## 七、安全与私有化
 

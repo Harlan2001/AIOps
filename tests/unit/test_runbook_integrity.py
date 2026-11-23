@@ -206,8 +206,8 @@ def test_sql_bind_params_have_source(runbooks):
 # ---------- 7) error_records 全部来源表/列在 977 清单内（N9：B1 类问题可被拦） ----------
 
 def test_error_records_sources_exist_in_catalog():
-    from ai_ops.engine import schema_check as SC
     from ai_ops.engine import error_records as ER
+    from ai_ops.engine import schema_check as SC
 
     catalog = SC.load_catalog()
     assert len(catalog) > 900

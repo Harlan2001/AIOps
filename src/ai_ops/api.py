@@ -8,9 +8,9 @@
   - 默认纯规则零 token；escalate=true 且部署允许时才走可选 LLM 升级。
   - 启动：uv sync --extra api && uvicorn ai_ops.api:app --host 0.0.0.0 --port 8000
 """
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime
-import json
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel

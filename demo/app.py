@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 
 from ai_ops import reporting
-from ai_ops.service import DiagnosticService, REAL_DEMOS
+from ai_ops.service import REAL_DEMOS, DiagnosticService
 
 st.set_page_config(page_title="DIMPLE 报错智能诊断工作台（GaussDB）", page_icon="🩺", layout="wide")
 

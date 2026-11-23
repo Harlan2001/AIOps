@@ -2,7 +2,6 @@
 """规则包双层来源与合并语义：包内基线 + AIOPS_RULES_DIR 外挂覆盖。"""
 import pathlib
 
-import pytest
 import yaml
 
 from ai_ops import rules_store

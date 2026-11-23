@@ -6,8 +6,8 @@
   编排层自动回退到规则引擎（保证离线、无 LLM 也能跑）。
 """
 import json
-import urllib.request
 import urllib.error
+import urllib.request
 
 from ai_ops.config import load_config
 from ai_ops.llm import prompts
