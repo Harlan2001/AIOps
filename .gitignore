@@ -1,33 +1,77 @@
-# ===== 敏感配置（含 API Key / 数据库口令，切勿提交；仓库只保留 *.example 模板）=====
-config/llm.yaml
-config/kb.yaml
+# ===== 敏感配置：真实配置不入库，仅提交对应的 *.example 模板 =====
 config/db.yaml
 config/dimple.yaml
-config/store.yaml
+config/kb.yaml
+config/llm.yaml
 config/schedule.yaml
+config/store.yaml
 
-# ===== 运行时数据与产物（模型 / 数据集 / 报告 / 日志 / KB 快照，不入库）=====
-# 测试夹具等需要入库的小样本 CSV 请放在 tests/fixtures/（不在 /var/ 下，不会被忽略）
+# 环境变量（适用于根目录及各子项目）；示例模板始终可提交
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Streamlit 的本地密钥；普通 config.toml 不受影响
+.streamlit/secrets.toml
+
+# ===== 项目运行时数据与本地产物 =====
+# 模型、数据集、日志、KB 快照等放在 var/；报告统一放在 reports/
+# 需要入库的小型测试数据请放在 tests/fixtures/，不要放在上述目录
 /var/
 /reports/
-/dist/
-*.egg-info/
+/logs/
+*.log
+*.log.*
 
-# ===== Python =====
+# 本地工作、演示与验证输出
+/internship-logs/
+/demo_*.txt
+
+# ===== Python：解释器缓存与虚拟环境 =====
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 .venv/
 venv/
 
-# ===== 测试覆盖率与质量工具缓存 =====
+# ===== Python：构建与分发（uv.lock 必须提交，不要忽略）=====
+/build/
+/dist/
+*.egg-info/
+.eggs/
+
+# ===== 测试、覆盖率与质量工具 =====
+.pytest_cache/
 .coverage
 .coverage.*
 htmlcov/
 coverage.xml
+.tox/
+.nox/
+.hypothesis/
+.mypy_cache/
+.pyright/
 .ruff_cache/
 
-# ===== 本地工作/个人目录（不入库）=====
-/internship-logs/
+# 其他本地工具缓存
+.cache/
+.uv-cache/
 
-# ===== 本地演示/验证临时输出（不入库）=====
-/demo_*.txt
+# ===== 编辑器与 IDE：保留可共享的 VS Code 工程配置 =====
+.idea/
+.vs/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+*.sw?
+*~
+
+# ===== 操作系统 =====
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/

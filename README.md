@@ -76,7 +76,6 @@ AIOps/
 ```powershell
 uv sync                      # 安装内核依赖（uv 0.12+，Python 3.12）
 uv sync --extra api          # API 服务（fastapi/uvicorn/pydantic）
-uv sync --extra demo         # Streamlit 演示前脸（汇报/演示用，可选）
 ```
 
 - 内核依赖仅 `py-opengauss`（GaussDB 驱动）+ `pyyaml`；无任何 ML 依赖、无模型文件。
@@ -92,6 +91,17 @@ uv sync --extra demo         # Streamlit 演示前脸（汇报/演示用，可�
   errors.yaml 按 id 合并、noise 去重追加），详见 `docs/adr/0001-单包src布局与目录约定.md`。
 
 ## 五、快速开始
+
+Windows PowerShell 一键启动 FastAPI 后端和 Vue 前端（首次启动自动安装前端依赖）：
+
+```powershell
+.\start.ps1                 # 同时启动前后端
+.\start.ps1 -BackendOnly    # 仅启动后端
+.\start.ps1 -FrontendOnly   # 仅启动前端
+```
+
+服务在独立窗口运行，前端地址为 http://127.0.0.1:5173 ，API 文档为 http://127.0.0.1:8000/docs 。
+也可使用以下命令分别执行诊断、自检与测试：
 
 ```powershell
 $env:PYTHONIOENCODING="utf-8"
@@ -134,11 +144,11 @@ uv run python scripts/coverage_scan.py
 - **可降级**：LLM、知识库任一缺失都不阻断主流程（200 优雅降级），降级原因在 `source`/报告/页面显式可见。
 - **可审计**：报告逐步标注由 规则/知识库/LLM 完成，LLM 结论附证据；未允许升级时 `escalate=true` 返回 409。
 
-## 八、产品形态（规划）
+## 八、产品形态
 
-私有化内网 **Web 诊断工作台**（Streamlit 演示壳）+ 诊断 API（FastAPI）；业务存储 MySQL 8。
-当前已落地：CLI 诊断内核 + FastAPI 服务（5 端点 + 契约测试）+ 容器化交付材料；
-前端重做/监控平台与 IM 集成按工程推进方案顺序执行。
+私有化内网 **Vue 3 Web 诊断工作台** + 诊断 API（FastAPI）。
+当前已落地：CLI 诊断内核 + FastAPI 服务 + Vue 3 工作台 + 容器化交付材料；
+监控平台与 IM 集成按工程推进方案顺序执行。
 
 ## 九、文档（`docs/`）
 
