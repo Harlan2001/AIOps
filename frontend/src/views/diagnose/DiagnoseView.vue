@@ -1,407 +1,453 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { message } from 'ant-design-vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { ClearOutlined, ExperimentOutlined } from '@ant-design/icons-vue'
 
-import { batchByItems, diagnose } from '@/api/diagnose'
+import { diagnose } from '@/api/diagnose'
 import { ApiError } from '@/api/client'
+import PageHeader from '@/components/PageHeader.vue'
 import ResultCard from '@/components/ResultCard.vue'
-import { SOURCES } from '@/constants/sources'
+import { DIAGNOSE_SOURCES } from '@/constants/sources'
 import { SOURCE_KEYS } from '@/constants/sourceKeys'
-import { TEXT_SAMPLES } from '@/constants/textSamples'
-import { extractBusinessDate, splitRecords } from '@/utils/textParse'
 import type { DiagnosisResult } from '@/types/contract'
 
 const mode = ref<'text' | 'record'>('text')
-
-// ---------- 文本模式：输入状态 ----------
 const text = ref('')
-const manualDate = ref('')
-const multiMode = ref(false)
+const ldate = ref('')
+const source = ref(DIAGNOSE_SOURCES[0].id)
+const date = ref('')
+const keyMode = ref<'fields' | 'json'>('fields')
+const keyValues = reactive<Record<string, string>>({})
+const keyText = ref('')
 const escalate = ref(false)
 const loading = ref(false)
 const errorMsg = ref('')
+const result = ref<DiagnosisResult | null>(null)
+const errors = reactive<Record<string, string>>({})
+const resultSection = ref<HTMLElement | null>(null)
+let generation = 0
 
-// 业务日期：手动优先，否则从文本自动提取
-const autoDate = computed(() => extractBusinessDate(text.value))
-const effectiveDate = computed(() => manualDate.value.trim() || autoDate.value)
-const dateSource = computed(() =>
-  manualDate.value.trim() ? '手动' : autoDate.value ? '自动识别' : '未识别')
-const lineCount = computed(() => splitRecords(text.value).length)
-
-// ---------- 本次会话历史（单条/多条统一展开） ----------
-interface HistoryEntry {
-  id: number
-  text: string
-  result: DiagnosisResult | null
-  error: string
-}
-const history = ref<HistoryEntry[]>([])
-const activeId = ref<number | null>(null)
-let seq = 0
-
-const activeEntry = computed(
-  () => history.value.find((h) => h.id === activeId.value) ?? null,
-)
-
-function fillSample(sampleText: string) {
-  text.value = sampleText
-  manualDate.value = ''
-  errorMsg.value = ''
+const keyMeta = computed(() => SOURCE_KEYS[source.value])
+const keyLabels: Record<string, string> = {
+  trader_no: '交易员代码',
+  local_no: '本地委托号',
+  purpose_code: '交易用途',
+  seq_no: '序号',
+  alarm_type: '报警类型',
+  member_id: '会员代码',
+  flow_code: '流程代码',
+  exch_code: '交易所',
 }
 
-function clearText() {
-  text.value = ''
-  manualDate.value = ''
-  errorMsg.value = ''
+function clearErrors() {
+  Object.keys(errors).forEach((key) => delete errors[key])
 }
 
-function addEntries(
-  items: Array<{ text: string; result: DiagnosisResult | null; error: string }>,
-) {
-  const created: HistoryEntry[] = []
-  for (const it of items) {
-    seq += 1
-    const entry: HistoryEntry = { id: seq, ...it }
-    history.value.unshift(entry)
-    created.push(entry)
+watch(source, () => {
+  Object.keys(keyValues).forEach((key) => delete keyValues[key])
+  keyText.value = ''
+  delete errors.key
+})
+
+watch(mode, clearErrors)
+
+function fillSample() {
+  if (keyMode.value === 'json') {
+    keyText.value = JSON.stringify(keyMeta.value.sample, null, 2)
+  } else {
+    Object.entries(keyMeta.value.sample).forEach(([key, value]) => {
+      keyValues[key] = value
+    })
   }
-  activeId.value = created[0].id
+  delete errors.key
+}
+
+function validDate(value: string) {
+  const match = /^(\d{4})(\d{2})(\d{2})$/.exec(value)
+  if (!match) return false
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day
+}
+
+function buildKey(): Record<string, unknown> | null {
+  if (keyMode.value === 'fields') {
+    return Object.fromEntries(keyMeta.value.requiredKeys.map((key) => [key, keyValues[key]?.trim() ?? '']))
+  }
+  try {
+    const parsed: unknown = keyText.value ? JSON.parse(keyText.value) : {}
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      errors.key = '主键 JSON 需要是对象，例如 {"seq_no":"1"}'
+      return null
+    }
+    return parsed as Record<string, unknown>
+  } catch {
+    errors.key = '主键 JSON 格式错误，请检查引号、逗号和括号'
+    return null
+  }
+}
+
+function validate() {
+  clearErrors()
+  if (mode.value === 'text') {
+    if (!text.value.trim()) errors.text = '请粘贴需要诊断的报错文本'
+    if (ldate.value && !validDate(ldate.value)) errors.ldate = '请选择有效的业务日期'
+    return !Object.keys(errors).length
+  }
+
+  if (!date.value || !validDate(date.value)) errors.date = '请选择有效的业务日期'
+  const key = buildKey()
+  if (!key) return false
+  const missing = keyMeta.value.requiredKeys.filter(
+    (field) => key[field] === undefined || key[field] === null || String(key[field]).trim() === '',
+  )
+  if (missing.length) errors.key = `请补充：${missing.map((field) => keyLabels[field] ?? field).join('、')}`
+  return !Object.keys(errors).length
+}
+
+async function scrollToResult() {
+  await nextTick()
+  if (window.matchMedia('(max-width: 1199px)').matches) {
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    resultSection.value?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
+  }
 }
 
 async function run() {
-  errorMsg.value = ''
-  const lines = (multiMode.value ? splitRecords(text.value) : [text.value.trim()])
-    .map((s) => s.trim())
-    .filter(Boolean)
-  if (!lines.length) {
-    errorMsg.value = '请输入报错文本'
-    return
-  }
+  if (!validate()) return
+  const requestGeneration = ++generation
   loading.value = true
+  errorMsg.value = ''
   try {
-    if (lines.length === 1) {
-      const res = await diagnose({
-        text: lines[0], ldate: effectiveDate.value, escalate: escalate.value,
+    let response: DiagnosisResult
+    if (mode.value === 'text') {
+      response = await diagnose({
+        text: text.value.trim(),
+        ldate: ldate.value || undefined,
+        escalate: escalate.value,
       })
-      addEntries([{ text: lines[0], result: res, error: '' }])
     } else {
-      const payloads = lines.map((t) => ({
-        text: t, ldate: effectiveDate.value, escalate: escalate.value,
-      }))
-      const res = await batchByItems(payloads)
-      addEntries(
-        res.results.map((bi, i) => ({
-          text: lines[i], result: bi.result ?? null, error: bi.error ?? '',
-        })),
-      )
+      response = await diagnose({
+        record: { source: source.value, date: date.value, key: buildKey() ?? {} },
+        escalate: escalate.value,
+      })
     }
-  } catch (e) {
-    errorMsg.value =
-      e instanceof ApiError
-        ? `请求失败（${e.status}）：${e.message}`
-        : '请求异常，请检查输入'
+    if (requestGeneration !== generation) return
+    result.value = response
+    await scrollToResult()
+  } catch (error) {
+    if (requestGeneration !== generation) return
+    if (error instanceof ApiError) {
+      errorMsg.value = error.status === 409
+        ? '当前部署未开启大模型升级。可关闭高级选项中的升级开关后重试。'
+        : error.status === 0
+          ? `无法连接诊断服务：${error.message}`
+          : `诊断请求未完成（${error.status}）：${error.message}`
+    } else {
+      errorMsg.value = '诊断请求异常，请检查输入后重试'
+    }
+    await scrollToResult()
   } finally {
-    loading.value = false
+    if (requestGeneration === generation) loading.value = false
   }
 }
 
-async function copyResult() {
-  const e = activeEntry.value
-  if (!e) return
-  const a = e.result?.answer
-  const txt = [
-    '报错：' + e.text,
-    '根因：' + (a?.root ?? ''),
-    '建议：' + (a?.actions?.join('；') ?? ''),
-    '置信度：' + (a?.confidence ?? ''),
-  ].join('\n')
-  try {
-    await navigator.clipboard.writeText(txt)
-    message.success('已复制当前结论')
-  } catch {
-    message.error('复制失败，请手动选择文本')
-  }
-}
-
-function exportHistory() {
-  const blob = new Blob([JSON.stringify(history.value, null, 2)], {
-    type: 'application/json',
-  })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = '文本诊断记录.json'
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-function entryTitle(e: HistoryEntry): string {
-  return e.result?.rule_res?.type?.title
-    ?? e.result?.answer?.root
-    ?? (e.error ? '诊断异常' : '未识别')
-}
-
-// ---------- 来源取数模式（保留原有逻辑） ----------
-const source = ref(SOURCES[0].id)
-const date = ref('')
-const keyText = ref('')
-const keyMeta = computed(() => SOURCE_KEYS[source.value])
-
-function fillKeySample() {
-  keyText.value = JSON.stringify(keyMeta.value.sample, null, 2)
+function clearForm() {
+  generation += 1
+  loading.value = false
+  text.value = ''
+  ldate.value = ''
+  date.value = ''
+  keyText.value = ''
+  Object.keys(keyValues).forEach((key) => delete keyValues[key])
+  escalate.value = false
+  result.value = null
+  errorMsg.value = ''
+  clearErrors()
 }
 </script>
 
 <template>
-  <a-card>
-    <a-radio-group v-model:value="mode" class="mode-group">
-      <a-radio-button value="text">自由文本</a-radio-button>
-      <a-radio-button value="record">来源取数</a-radio-button>
-    </a-radio-group>
+  <div class="page-shell">
+    <PageHeader
+      title="单条诊断"
+      description="粘贴一段报错，或按来源定位原始记录。默认使用规则引擎，结论、处理建议和取证过程会一起呈现。"
+    >
+      <template #extra>
+        <a-button @click="clearForm"><ClearOutlined /> 清空</a-button>
+      </template>
+    </PageHeader>
 
-    <!-- ============ 自由文本：左右分栏 ============ -->
-    <a-row v-if="mode === 'text'" :gutter="16">
-      <!-- 左：输入区 -->
-      <a-col :span="10">
-        <a-form layout="vertical">
-          <a-form-item>
-            <template #label>
-              <a-space>
-                <span>报错文本</span>
-                <a-tag>{{ text.length }} 字符</a-tag>
-                <a-tag v-if="multiMode">{{ lineCount }} 条</a-tag>
-              </a-space>
-            </template>
-            <a-textarea
-              v-model:value="text"
-              :rows="12"
-              placeholder="粘贴单条报错；多条模式下按行或空行分隔"
-            />
-            <div class="input-actions">
-              <a-button size="small" @click="clearText">清空</a-button>
-            </div>
-          </a-form-item>
+    <div class="diagnose-workspace">
+      <a-card class="input-card" :bordered="true">
+        <template #title><span class="card-title"><span class="step">1</span>诊断输入</span></template>
+        <a-radio-group v-model:value="mode" class="mode-group" option-type="button" button-style="solid">
+          <a-radio-button value="text">粘贴报错</a-radio-button>
+          <a-radio-button value="record">从来源取数</a-radio-button>
+        </a-radio-group>
 
-          <a-form-item label="常用示例（点击填充）">
-            <div class="sample-list">
-              <a-button
-                v-for="s in TEXT_SAMPLES"
-                :key="s.id"
-                size="small"
-                class="sample-btn"
-                @click="fillSample(s.text)"
-              >
-                {{ s.label }}
-              </a-button>
+        <a-form layout="vertical" @submit.prevent="run">
+          <template v-if="mode === 'text'">
+            <a-form-item label="报错文本" required :validate-status="errors.text ? 'error' : ''" :help="errors.text">
+              <a-textarea
+                v-model:value="text"
+                :rows="8"
+                placeholder="例如：ORA-00001: unique constraint ..."
+                @input="delete errors.text"
+              />
+              <p class="field-hint">可粘贴完整错误栈，原始文本只用于本次诊断，不会写入浏览器存储。</p>
+            </a-form-item>
+            <a-form-item label="业务日期（可选）" :validate-status="errors.ldate ? 'error' : ''" :help="errors.ldate">
+              <a-date-picker
+                v-model:value="ldate"
+                value-format="YYYYMMDD"
+                format="YYYY-MM-DD"
+                placeholder="选择业务日期"
+                class="full-width"
+              />
+            </a-form-item>
+          </template>
+
+          <template v-else>
+            <a-form-item label="错误来源" required>
+              <a-select v-model:value="source" :options="DIAGNOSE_SOURCES.map((item) => ({ value: item.id, label: `${item.label}（${item.id}）` }))" />
+              <p class="field-hint">这里仅展示支持单条取数的历史错误来源。</p>
+            </a-form-item>
+            <a-form-item label="业务日期" required :validate-status="errors.date ? 'error' : ''" :help="errors.date">
+              <a-date-picker
+                v-model:value="date"
+                value-format="YYYYMMDD"
+                format="YYYY-MM-DD"
+                placeholder="选择记录日期"
+                class="full-width"
+              />
+            </a-form-item>
+
+            <div class="key-heading">
+              <span>记录主键</span>
+              <a-radio-group v-model:value="keyMode" size="small">
+                <a-radio-button value="fields">逐项填写</a-radio-button>
+                <a-radio-button value="json">JSON</a-radio-button>
+              </a-radio-group>
             </div>
+            <a-form-item :validate-status="errors.key ? 'error' : ''" :help="errors.key">
+              <div v-if="keyMode === 'fields'" class="key-fields">
+                <label v-for="field in keyMeta.requiredKeys" :key="field" class="key-field">
+                  <span>{{ keyLabels[field] ?? field }} <code>{{ field }}</code></span>
+                  <a-input
+                    v-model:value="keyValues[field]"
+                    :placeholder="keyMeta.sample[field] ? `示例：${keyMeta.sample[field]}` : `请输入 ${field}`"
+                    @input="delete errors.key"
+                  />
+                </label>
+              </div>
+              <a-textarea
+                v-else
+                v-model:value="keyText"
+                :rows="6"
+                placeholder='{"trader_no":"trader1","local_no":"0001"}'
+                @input="delete errors.key"
+              />
+              <div class="key-help">
+                <span>日期字段 {{ keyMeta.dateCol }} 由上方日期自动补全</span>
+                <a-button type="link" size="small" @click="fillSample">填充示例</a-button>
+              </div>
+            </a-form-item>
+          </template>
+
+          <a-collapse ghost class="advanced-options">
+            <a-collapse-panel key="advanced" header="高级诊断选项">
+              <a-checkbox v-model:checked="escalate">允许使用大模型升级诊断</a-checkbox>
+              <p class="field-hint">
+                默认仅运行规则诊断。升级可能耗时更长，并取决于部署方是否允许；不可用时会明确标注规则兜底，不会静默伪装成 AI 结论。
+              </p>
+            </a-collapse-panel>
+          </a-collapse>
+
+          <a-button type="primary" size="large" html-type="submit" :loading="loading" block>
+            <ExperimentOutlined /> {{ result ? '重新诊断' : '开始诊断' }}
+          </a-button>
+        </a-form>
+      </a-card>
+
+      <section id="diagnosis-result" ref="resultSection" class="result-panel">
+        <a-card :bordered="true">
+          <template #title>
+            <span class="card-title"><span class="step">2</span>诊断报告</span>
+          </template>
+          <template v-if="loading && !result">
+            <a-alert type="info" show-icon message="正在执行规则识别与查库取证，请稍候" class="loading-notice" />
+            <a-skeleton active :paragraph="{ rows: 9 }" />
+          </template>
+          <template v-else>
             <a-alert
-              v-if="text"
+              v-if="loading && result"
               type="info"
               show-icon
-              class="hint-block"
-              :message="TEXT_SAMPLES.find((x) => x.text === text)?.hint || ''"
+              message="正在生成新诊断，下方暂时保留上次结果"
+              class="loading-notice"
             />
-          </a-form-item>
-
-          <a-form-item label="业务日期 YYYYMMDD">
-            <a-input
-              v-model:value="manualDate"
-              :placeholder="autoDate || '留空则自动识别，识别不到归当天'"
-            />
-            <p class="hint">当前日期：{{ effectiveDate || '（空）' }}（{{ dateSource }}）</p>
-          </a-form-item>
-
-          <a-form-item>
-            <a-space wrap>
-              <a-checkbox v-model:checked="multiMode">多条模式</a-checkbox>
-              <a-checkbox v-model:checked="escalate">
-                允许 LLM 升级（受部署开关约束）
-              </a-checkbox>
-            </a-space>
-          </a-form-item>
-
-          <a-button
-            type="primary"
-            block
-            :loading="loading"
-            @click="run"
-          >
-            开始诊断
-          </a-button>
-        </a-form>
-      </a-col>
-
-      <!-- 右：结果区 -->
-      <a-col :span="14">
-        <a-alert
-          v-if="errorMsg"
-          type="error"
-          show-icon
-          :message="errorMsg"
-          class="hint-block"
-        />
-        <a-empty
-          v-if="!history.length"
-          description="诊断结果将展示在这里"
-          style="padding: 60px 0"
-        />
-        <template v-else>
-          <div class="result-toolbar">
-            <span class="toolbar-title">本次记录（{{ history.length }}）</span>
-            <a-space>
-              <a-button size="small" @click="copyResult">复制结论</a-button>
-              <a-button size="small" @click="exportHistory">导出 JSON</a-button>
-            </a-space>
-          </div>
-          <div class="history-list">
-            <div
-              v-for="h in history"
-              :key="h.id"
-              class="history-item"
-              :class="{ active: h.id === activeId }"
-              @click="activeId = h.id"
-            >
-              <span class="history-no">#{{ h.id }}</span>
-              <span class="history-title">{{ entryTitle(h) }}</span>
-              <a-tag v-if="h.result?.answer?.confidence != null" color="blue">
-                {{ Number(h.result!.answer!.confidence).toFixed(2) }}
-              </a-tag>
-            </div>
-          </div>
-          <div v-if="activeEntry" class="result-detail">
             <a-alert
-              v-if="activeEntry.error"
-              type="warning"
+              v-if="errorMsg"
+              type="error"
               show-icon
-              :message="'该条诊断异常：' + activeEntry.error"
-              class="hint-block"
+              closable
+              :message="errorMsg"
+              class="error-notice"
+              @close="errorMsg = ''"
             />
-            <ResultCard
-              v-if="activeEntry.result"
-              :result="activeEntry.result"
-            />
-          </div>
-        </template>
-      </a-col>
-    </a-row>
-
-    <!-- ============ 来源取数（保留原表单） ============ -->
-    <a-row v-else :gutter="16">
-      <a-col :span="12">
-        <a-form layout="vertical">
-          <a-form-item label="错误来源">
-            <a-select v-model:value="source">
-              <a-select-option
-                v-for="s in SOURCES"
-                :key="s.id"
-                :value="s.id"
-              >
-                {{ s.label }}（{{ s.id }}）
-              </a-select-option>
-            </a-select>
-          </a-form-item>
-          <a-form-item label="业务日期 YYYYMMDD">
-            <a-input v-model:value="date" />
-          </a-form-item>
-          <a-form-item>
-            <template #label>
-              <a-space>
-                <span>主键 JSON（必填：{{ keyMeta.requiredKeys.join('、') }}）</span>
-                <a-button type="link" size="small" @click="fillKeySample">
-                  填充示例
-                </a-button>
-              </a-space>
-            </template>
-            <a-textarea v-model:value="keyText" :rows="4" />
-            <p class="hint">
-              日期列 {{ keyMeta.dateCol }} 由上方业务日期自动补全，无需写入。
-            </p>
-          </a-form-item>
-          <a-button type="primary" :loading="loading" @click="run">
-            开始诊断
-          </a-button>
-        </a-form>
-      </a-col>
-    </a-row>
-  </a-card>
+            <div v-if="result" :class="{ 'stale-result': loading }">
+              <ResultCard :result="result" />
+            </div>
+            <div v-else-if="!errorMsg" class="result-empty">
+              <a-empty description="">
+                <template #description>
+                  <h3>诊断结果会显示在这里</h3>
+                  <p>完成左侧输入后开始诊断，你将看到根因、处理建议和每一步取证依据。</p>
+                </template>
+              </a-empty>
+            </div>
+          </template>
+        </a-card>
+      </section>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.mode-group {
-  margin-bottom: 16px;
+.diagnose-workspace {
+  display: grid;
+  grid-template-columns: minmax(340px, 410px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
 }
 
-.input-actions {
-  margin-top: 6px;
-  text-align: right;
+.card-title {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
 }
 
-.sample-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.sample-btn {
-  margin: 0;
-}
-
-.hint {
-  margin-top: 4px;
-  color: #888;
+.step {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand-hover);
+  background: var(--brand-soft);
+  border-radius: 7px;
   font-size: 12px;
 }
 
-.hint-block {
-  margin-top: 10px;
+.mode-group {
+  display: flex;
+  width: 100%;
+  margin-bottom: 24px;
 }
 
-.result-toolbar {
+.mode-group :deep(.ant-radio-button-wrapper) {
+  flex: 1;
+  text-align: center;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.field-hint {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.key-heading {
   display: flex;
+  margin-bottom: 12px;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
-.toolbar-title {
-  font-weight: 600;
-}
-
-.history-list {
-  max-height: 200px;
-  overflow-y: auto;
-  border: 1px solid #f0f0f0;
-  border-radius: 6px;
-  margin-bottom: 14px;
-}
-
-.history-item {
+.key-fields {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  cursor: pointer;
-  border-bottom: 1px solid #f5f5f5;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.history-item:last-child {
-  border-bottom: none;
-}
-
-.history-item.active {
-  background: #e6f4ff;
-}
-
-.history-no {
-  color: #999;
+.key-field > span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
   font-size: 12px;
-  flex: none;
 }
 
-.history-title {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.key-field code {
+  margin-left: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.key-help {
+  display: flex;
+  margin-top: 6px;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.advanced-options {
+  margin: 0 -12px 16px;
+}
+
+.result-panel {
+  min-width: 0;
+  scroll-margin-top: 84px;
+}
+
+.result-panel > .ant-card {
+  min-height: 560px;
+}
+
+.loading-notice,
+.error-notice {
+  margin-bottom: 18px;
+}
+
+.stale-result {
+  opacity: 0.62;
+}
+
+.result-empty {
+  display: grid;
+  min-height: 460px;
+  place-items: center;
+}
+
+.result-empty h3 {
+  margin: 12px 0 8px;
+  color: var(--text-primary);
+  font-size: 17px;
+}
+
+.result-empty p {
+  max-width: 360px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+@media (max-width: 1199px) {
+  .diagnose-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .result-panel > .ant-card {
+    min-height: 360px;
+  }
 }
 </style>

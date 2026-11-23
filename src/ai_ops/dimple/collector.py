@@ -294,13 +294,18 @@ BUSINESS_ENDPOINTS = {
     "dimple_rfq_default_declaration",
 }
 
-# 表示"超限/成立"的取值（兼容字符串与数字、布尔）。
-_TRUE_TOKENS = {"1", "true", "y", "yes", "是", "超限"}
+# 表示"超限/成立"的取值与历史查询共用，避免双层过滤口径漂移。
+_TRUE_TOKENS = diag_repo.QUOTA_OVER_TOKENS
 
 
 def _quota_is_over(raw):
-    """额度与限额：仅当 ifOver 表示超限时才是异常。"""
-    return str(raw.get("ifOver", "")).strip().lower() in _TRUE_TOKENS
+    """额度与限额：仅当 ifOver 表示超限时才是异常，兼容 JSON 布尔和数值。"""
+    value = raw.get("ifOver")
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value == 1
+    return str(value or "").strip().lower() in _TRUE_TOKENS
 
 
 ANOMALY_PREDICATES = {

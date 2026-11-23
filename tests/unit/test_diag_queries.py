@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 """M2 历史诊断查询/聚合与 API 单元测试（离线打桩，不连真实 GaussDB）。"""
+import json
+import sqlite3
+
 import pytest
 
 from ai_ops.store import connection, diag_repo
@@ -35,15 +38,54 @@ def fake(monkeypatch):
 
 def test_list_logs_filters_and_paging(fake):
     fake.add("COUNT", ["cnt"], [[5]])
-    fake.add("ORDER BY business_date", ["id", "source"], [[1, "ftr_err"], [2, None]])
+    fake.add("ORDER BY created_at DESC, id DESC", ["id", "source"], [[1, "ftr_err"], [2, None]])
     out = diag_repo.list_logs(source="ftr_err", offset=0, limit=10)
     assert out["total"] == 5
     assert len(out["items"]) == 2
     assert out["items"][0] == {"id": 1, "source": "ftr_err"}
     # 条件与分页参数被传入
-    list_call = [c for c in fake.calls if "ORDER BY business_date" in c[0]][0]
+    list_call = [c for c in fake.calls if "ORDER BY created_at DESC, id DESC" in c[0]][0]
     assert list_call[1]["source"] == "ftr_err"
     assert list_call[1]["limit"] == 10
+
+
+def test_list_logs_dimple_only_combines_source_and_anomaly_filters(fake):
+    fake.add("COUNT", ["cnt"], [[1]])
+    fake.add("ORDER BY created_at DESC, id DESC", ["id"], [[1]])
+    diag_repo.list_logs(dimple_only=True, exclude_business=True)
+
+    assert len(fake.calls) == 2
+    for sql, _params in fake.calls:
+        assert "SUBSTR(source, 1, 7) = 'dimple_'" in sql
+        assert "source IS NULL OR source NOT IN" in sql
+
+
+def test_anomaly_sql_matches_collector_for_quota_values():
+    """历史 SQL 与采集层对所有支持/拒绝的 ifOver 值必须给出相同结论。"""
+    from ai_ops.dimple import collector
+
+    values = [
+        None, 0, 0.0, "0", "0.0", False, "False", "no", "unknown", "10",
+        1, 1.0, "1", "1.0", True, "TRUE", "y", "YES", "是", "超限",
+    ]
+    db = sqlite3.connect(":memory:")
+    db.execute("CREATE TABLE logs (id INTEGER, source TEXT, error_text TEXT)")
+    for i, value in enumerate(values):
+        rendered = "" if value is None else str(value)
+        db.execute(
+            "INSERT INTO logs VALUES (?, ?, ?)",
+            (i, "dimple_quota_and_limit", "额度与限额：是否超限 " + rendered))
+
+    expected = {
+        i for i, value in enumerate(values)
+        if collector.is_anomaly("dimple_quota_and_limit", {"ifOver": value})
+    }
+    actual = {
+        row[0] for row in db.execute(
+            "SELECT id FROM logs WHERE " + diag_repo._anomaly_cond()).fetchall()
+    }
+    assert actual == expected
+    assert actual  # 同时覆盖真值，避免条件误写成全部排除
 
 
 def test_get_log_found_and_missing(fake):
@@ -124,6 +166,50 @@ def test_api_detail_404(monkeypatch):
     with TestClient(app) as client:
         monkeypatch.setattr(repo, "get_log", lambda i, table=None: None)
         assert client.get("/v1/diagnoses/123").status_code == 404
+
+
+def test_api_escalate_existing_log_uses_ephemeral_preview(monkeypatch):
+    """详情升级必须走临时预览，并保留原诊断快照里的采集参数。"""
+    from fastapi.testclient import TestClient
+
+    from ai_ops.api import app
+    from ai_ops.store import diag_repo as repo
+
+    monkeypatch.setattr(repo, "get_log", lambda i, table=None: {
+        "id": i,
+        "source": "dimple_violation_order",
+        "error_text": "违规委托：合约 au",
+        "business_date": "20261120",
+        "error_code": 0,
+        "key_json": json.dumps({"contractId": "au"}),
+        "result_json": json.dumps({"rule_res": {"params": {"contract": "au"}}}),
+    })
+    seen = {}
+
+    def fake_preview(rec):
+        seen.update(rec)
+        return {
+            "text": rec["text"],
+            "answer": {"root": "LLM 根因", "actions": [], "confidence": 0.8},
+            "source": "LLM 诊断",
+            "escalated": True,
+        }
+
+    def forbidden_manual_path(rec):
+        raise AssertionError("详情升级不得调用会新增手工记录的 diagnose_escalated")
+
+    with TestClient(app) as client:
+        svc = app.state.service
+        monkeypatch.setattr(svc, "escalation_allowed", lambda: True)
+        monkeypatch.setattr(svc, "diagnose_escalated_ephemeral", fake_preview)
+        monkeypatch.setattr(svc, "diagnose_escalated", forbidden_manual_path)
+        response = client.post("/v1/diagnoses/7/escalate")
+
+    assert response.status_code == 200
+    assert response.json()["answer"]["root"] == "LLM 根因"
+    assert seen["source"] == "dimple_violation_order"
+    assert seen["key"] == {"contractId": "au"}
+    assert seen["params"] == {"contract": "au"}
 
 
 # ---------- M3 标注 ----------

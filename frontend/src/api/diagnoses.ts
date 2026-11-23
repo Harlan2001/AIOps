@@ -1,8 +1,10 @@
 import { http } from './client'
+import type { AxiosRequestConfig } from 'axios'
 import type {
   DiagListResponse,
   DiagLogItem,
   DiagStats,
+  DiagnosisResult,
 } from '@/types/contract'
 
 export interface DiagListParams {
@@ -13,6 +15,7 @@ export interface DiagListParams {
   start_date?: string
   end_date?: string
   anomaly_only?: boolean
+  dimple_only?: boolean
   offset?: number
   limit?: number
 }
@@ -39,6 +42,16 @@ export function getDiagnoses(
 export function getDiagnosisDetail(id: number): Promise<DiagLogItem> {
   return http
     .get<DiagLogItem>(`/v1/diagnoses/${id}`)
+    .then((res) => res.data)
+}
+
+// 已有日志的临时升级预览：后端不新增诊断事件，也不覆盖原始记录。
+export function escalateDiagnosis(
+  id: number,
+  config?: AxiosRequestConfig,
+): Promise<DiagnosisResult> {
+  return http
+    .post<DiagnosisResult>(`/v1/diagnoses/${id}/escalate`, undefined, config)
     .then((res) => res.data)
 }
 

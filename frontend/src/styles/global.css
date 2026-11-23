@@ -1,60 +1,233 @@
-/* 全局视觉基线：专业、克制、轻量质感。 */
-
 :root {
-  --brand: #1677ff;
-  --brand-dark: #0f2f5c;
-  --bg: #f3f5f9;
-  --card-radius: 10px;
-  --card-shadow: 0 1px 2px rgba(15, 47, 92, 0.06),
-    0 4px 14px rgba(15, 47, 92, 0.06);
+  color-scheme: light;
+  --brand: #2a78d6;
+  --brand-hover: #1c5cab;
+  --brand-soft: #edf5ff;
+  --page-bg: #f5f7fb;
+  --surface: #ffffff;
+  --surface-subtle: #f8fafc;
+  --text-primary: #172033;
+  --text-secondary: #566174;
+  --text-muted: #687386;
+  --border: #dfe5ed;
+  --border-soft: #e9eef4;
+  --success: #237804;
+  --success-soft: #f0f9eb;
+  --warning: #9a5b00;
+  --warning-soft: #fff8e8;
+  --danger: #c93535;
+  --danger-soft: #fff2f0;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --shadow-card: 0 1px 2px rgba(23, 32, 51, 0.03), 0 6px 20px rgba(23, 32, 51, 0.035);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--page-bg);
 }
 
 body {
   margin: 0;
-  background: var(--bg);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
-    'PingFang SC', 'Microsoft YaHei', sans-serif;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--page-bg);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* 卡片：圆角 + 轻阴影 + 悬停轻微抬升 */
-.ant-card {
-  border-radius: var(--card-radius);
-  box-shadow: var(--card-shadow);
-  border: 1px solid rgba(15, 47, 92, 0.05);
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
+button,
+input,
+textarea,
+select {
+  font: inherit;
 }
 
-.ant-card:hover {
-  box-shadow: 0 2px 4px rgba(15, 47, 92, 0.08),
-    0 10px 24px rgba(15, 47, 92, 0.1);
+#app {
+  min-height: 100vh;
 }
 
-/* 表格/按钮圆角统一 */
-.ant-table-wrapper .ant-table {
-  border-radius: 8px;
+h1,
+h2,
+h3,
+h4,
+p {
+  margin-top: 0;
 }
 
-.ant-btn {
-  border-radius: 8px;
+:focus-visible {
+  outline: 3px solid rgba(42, 120, 214, 0.34);
+  outline-offset: 2px;
 }
 
-/* 统计数字强调 */
-.ant-statistic-content {
+::selection {
+  color: var(--text-primary);
+  background: #cfe3fb;
+}
+
+.page-shell {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.surface-card {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.filter-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+
+.filter-field {
+  min-width: 0;
+}
+
+.filter-label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.numeric-cell {
   font-variant-numeric: tabular-nums;
 }
 
-/* 细滚动条 */
+.cell-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ant-card {
+  border-color: var(--border-soft);
+  box-shadow: var(--shadow-card);
+}
+
+.ant-card .ant-card-head {
+  min-height: 56px;
+  border-bottom-color: var(--border-soft);
+}
+
+.ant-card .ant-card-head-title {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.ant-btn,
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-select-selector,
+.ant-picker,
+.ant-tag,
+.ant-alert,
+.ant-drawer-content,
+.ant-modal-content {
+  transition-duration: 160ms;
+}
+
+.ant-table-wrapper .ant-table {
+  color: var(--text-primary);
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th {
+  font-weight: 600;
+}
+
+.ant-table-wrapper .ant-table-tbody > tr > td {
+  border-bottom-color: var(--border-soft);
+}
+
+.ant-table-wrapper .ant-table-tbody > tr > td.ant-table-cell-fix-right {
+  background: #ffffff;
+}
+
+.ant-table-wrapper .ant-table-tbody > tr.ant-table-row:hover > td.ant-table-cell-fix-right {
+  background: #fafcff;
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th.ant-table-cell-fix-right {
+  background: #f8fafc;
+}
+
+.ant-empty-description {
+  color: var(--text-muted);
+}
+
+.ant-statistic-content {
+  font-variant-numeric: normal;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(15, 47, 92, 0.18);
+  background: #c5cfdb;
   border-radius: 8px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(15, 47, 92, 0.3);
+  background: #a9b7c7;
+}
+
+@media (max-width: 640px) {
+  .filter-bar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .filter-actions > .ant-btn {
+    flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

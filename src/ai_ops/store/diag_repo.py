@@ -45,16 +45,23 @@ BUSINESS_SOURCES = {
 }
 
 
+# 额度与限额 ifOver 表示"超限/成立"的取值；采集层与历史查询共用同一口径。
+QUOTA_OVER_TOKENS = {"1", "1.0", "true", "y", "yes", "是", "超限"}
+
+
 def _anomaly_cond():
     """返回"仅真实异常"的 SQL 片段：
       1) 排除业务数据来源（行情/持仓/资金/库存等）；
-      2) 额度限额只保留"超限"记录，未超限（文本含"是否超限 0"）排除；
+      2) 额度限额按 ifOver 渲染值做真值白名单过滤，与采集层保持一致；
     source 为空的早期演示数据保留。不物理删除，业务数据仍可回溯。"""
     in_list = ", ".join("'%s'" % s for s in sorted(BUSINESS_SOURCES))
+    quota_over = " OR ".join(
+        "LOWER(TRIM(error_text)) LIKE '%%是否超限 %s'" % token
+        for token in sorted(QUOTA_OVER_TOKENS))
     return (
         "(source IS NULL OR source NOT IN (%s)) "
-        "AND NOT (source = 'dimple_quota_and_limit' "
-        "AND error_text LIKE '%%是否超限 0%%')" % in_list)
+        "AND (source IS NULL OR source <> 'dimple_quota_and_limit' "
+        "OR (%s))" % (in_list, quota_over))
 
 
 def _json_default(o):
@@ -203,14 +210,17 @@ def _rows_to_dicts(cols, rows):
 
 def list_logs(table=None, source=None, diag_class=None, diag_type=None,
               annot_status=None, start_date=None, end_date=None,
-              offset=0, limit=50, exclude_business=False):
+              offset=0, limit=50, exclude_business=False, dimple_only=False):
     """按条件分页查询历史诊断（按 id 倒序），返回 {total, items}。
 
-    exclude_business=True：叠加"仅真实异常"过滤，排除业务数据与未超限记录，
-    供实时监控页使用；历史页默认 False，可查看全部落库记录。
+    exclude_business=True：叠加"仅真实异常"过滤，排除业务数据与未超限记录。
+    dimple_only=True：仅查询 Dimple 来源，避免手工/历史巡检记录混入实时页。
+    历史页两个开关默认均为 False，可查看全部落库记录。
     """
     table = table or load_table()
     where, params = [], {}
+    if dimple_only:
+        where.append("SUBSTR(source, 1, 7) = 'dimple_'")
     if exclude_business:
         where.append(_anomaly_cond())
 
@@ -242,7 +252,7 @@ def list_logs(table=None, source=None, diag_class=None, diag_type=None,
     qparams["limit"] = max(1, min(int(limit), 200))
     cols_sql = ", ".join(_LIST_COLS)
     list_sql = (
-        "SELECT %s FROM %s%s ORDER BY business_date DESC NULLS LAST, id DESC "
+        "SELECT %s FROM %s%s ORDER BY created_at DESC, id DESC "
         "LIMIT :limit OFFSET :offset"
         % (cols_sql, table, where_sql))
     cols, rows = connection.execute_select(list_sql, qparams)
