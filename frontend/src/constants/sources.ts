@@ -1,5 +1,10 @@
-// 错误来源（与后端 error_records.SOURCES 对应，末尾为 Dimple 实时接口来源）。
-export const SOURCES: Array<{ id: string; label: string }> = [
+export interface SourceOption {
+  id: string
+  label: string
+}
+
+// 单条诊断与批量回放只支持后端 error_records.SOURCES 中的 7 个取数来源。
+export const DIAGNOSE_SOURCES: SourceOption[] = [
   { id: 'ftr_err', label: '期货错误委托' },
   { id: 'quote_err', label: '报价错误委托' },
   { id: 'alarm', label: '敞口/止损报警' },
@@ -7,6 +12,9 @@ export const SOURCES: Array<{ id: string; label: string }> = [
   { id: 'rule_alarm', label: '合规报警' },
   { id: 'data_check', label: '数据检查' },
   { id: 'flow_control', label: '结算流程控制' },
+]
+
+const DIMPLE_SOURCES: SourceOption[] = [
   { id: 'dimple_compliance_alarm', label: 'Dimple 合规预警（实时）' },
   { id: 'dimple_self_deal', label: 'Dimple 自成交（实时）' },
   { id: 'dimple_violation_order', label: 'Dimple 违规委托（实时）' },
@@ -45,6 +53,12 @@ export const SOURCES: Array<{ id: string; label: string }> = [
   { id: 'dimple_trader_exposure', label: 'Dimple 交易员风险敞口（实时）' },
   { id: 'dimple_trader_qty_weight_limit', label: 'Dimple 交易员数量重量限额（实时）' },
 ]
+
+// 历史与实时日志筛选可以查看全部来源，与诊断取数来源严格分开。
+export const LOG_SOURCES: SourceOption[] = [...DIAGNOSE_SOURCES, ...DIMPLE_SOURCES]
+export const SOURCE_LABELS: Record<string, string> = Object.fromEntries(
+  LOG_SOURCES.map((item) => [item.id, item.label]),
+)
 
 // Dimple 实时监控来源 id -> 中文标签（实时页展示用）。
 export const REALTIME_SOURCE_LABELS: Record<string, string> = {

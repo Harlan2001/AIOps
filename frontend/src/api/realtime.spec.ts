@@ -36,4 +36,20 @@ describe('getRealtimeAlarms', () => {
       dimple_only: true,
     })
   })
+
+  it('叠加来源与分类筛选时保留 Dimple 和异常语义', async () => {
+    await getRealtimeAlarms(0, 10, true, {
+      source: 'dimple_compliance_alarm',
+      diag_class: 'biz',
+    })
+
+    expect(mocks.getDiagnoses).toHaveBeenCalledWith({
+      offset: 0,
+      limit: 10,
+      anomaly_only: true,
+      dimple_only: true,
+      source: 'dimple_compliance_alarm',
+      diag_class: 'biz',
+    })
+  })
 })
