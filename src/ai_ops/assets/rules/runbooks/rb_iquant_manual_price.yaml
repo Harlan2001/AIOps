@@ -1,0 +1,10 @@
+# iQuant 自带证据 runbook：手动修改报价（MANUAL_PRICE_CHANGE）
+id: rb_iquant_manual_price
+title: 手动修改报价
+steps: []
+default:
+  root: "手动修改报价：触发对象 {objectName} 存在人工修改报价行为（规则 {ruleNo}，业务日期 {trade_date}，已触发 {triggerCount} 次），需关注改价合理性与合规留痕。"
+  action:
+    - "核对改价前后价格与修改原因，确认是否经过审批并留痕"
+    - "评估修改后报价是否偏离市场公允水平"
+    - "若为自动定价异常下的人工干预，排查定价链路；规范手动改价操作流程"

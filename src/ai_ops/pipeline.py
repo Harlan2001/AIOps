@@ -33,6 +33,22 @@ LOW_CONFIDENCE = 0.4
 SEMANTIC_CONFIDENCE = {"synonym": 0.8, "fuzzy": 0.6}
 
 
+def rule_confidence(rule_res):
+    """统一置信度（Dimple / iQuant 通用，零模型）：
+    - 精确关键词命中且主证据成功（Dimple 查库取证 / iQuant 事件自带证据）= 1.0；
+    - 同义词召回 = 0.8；字符模糊召回 = 0.6；
+    - 未识别类型、或精确命中但主证据无成功取证 = 0.4。
+    """
+    if not rule_res.get("type"):
+        return LOW_CONFIDENCE
+    match_kind = rule_res.get("match_kind")
+    if match_kind in SEMANTIC_CONFIDENCE:
+        return SEMANTIC_CONFIDENCE[match_kind]
+    if rule_res.get("primary_evidence_ok"):
+        return 1.0
+    return LOW_CONFIDENCE
+
+
 def _evidence_note(rule_res):
     """汇总缺参/执行失败的取证步骤，生成显式降级说明（B8：缺证不能再静默给满分）。"""
     parts = []
@@ -108,11 +124,8 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None, *,
         primary_ok = bool(rule_res.get("primary_evidence_ok"))
         rule_hit = verdict_done and primary_ok
         degraded = verdict_done and not primary_ok
-        # 精确关键词命中取证成功=1.0；语义召回按同义词/模糊下调；未取证=0.4
-        if rule_hit:
-            confidence = SEMANTIC_CONFIDENCE.get(rule_res.get("match_kind"), 1.0)
-        else:
-            confidence = LOW_CONFIDENCE
+        # 统一置信度规则：精确命中+主证据成功=1.0，同义词 0.8，模糊 0.6，未识别/无取证 0.4
+        confidence = rule_confidence(rule_res)
         type_id = (rule_res.get("type") or {}).get("id")
 
         result = {"text": text, "errcode": errcode, "ldate": ldate,

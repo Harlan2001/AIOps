@@ -1,0 +1,10 @@
+# iQuant 自带证据 runbook：交易头寸大幅波动（POSITION_SWING）
+id: rb_iquant_position_swing
+title: 交易头寸大幅波动
+steps: []
+default:
+  root: "交易头寸大幅波动：触发对象 {objectName} 在监控时间窗口内的头寸变化率超过阈值（规则 {ruleNo}，业务日期 {trade_date}，已触发 {triggerCount} 次），需防范敞口过快累积。"
+  action:
+    - "核对窗口内成交明细与头寸变化量，确认是否为大单或批量成交导致"
+    - "检查交易员操作与自动化交易策略是否存在异常"
+    - "如属正常交易，评估头寸限额与波动阈值是否需要调整；持续跟踪防止风险敞口过快增长"

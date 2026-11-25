@@ -38,25 +38,38 @@ def fake(monkeypatch):
 
 def test_list_logs_filters_and_paging(fake):
     fake.add("COUNT", ["cnt"], [[5]])
-    fake.add("ORDER BY created_at DESC, id DESC", ["id", "source"], [[1, "ftr_err"], [2, None]])
+    fake.add("ORDER BY business_date DESC NULLS LAST, created_at DESC, id DESC", ["id", "source"], [[1, "ftr_err"], [2, None]])
     out = diag_repo.list_logs(source="ftr_err", offset=0, limit=10)
     assert out["total"] == 5
     assert len(out["items"]) == 2
     assert out["items"][0] == {"id": 1, "source": "ftr_err"}
     # 条件与分页参数被传入
-    list_call = [c for c in fake.calls if "ORDER BY created_at DESC, id DESC" in c[0]][0]
+    list_call = [c for c in fake.calls if "ORDER BY business_date DESC NULLS LAST, created_at DESC, id DESC" in c[0]][0]
     assert list_call[1]["source"] == "ftr_err"
     assert list_call[1]["limit"] == 10
 
 
 def test_list_logs_dimple_only_combines_source_and_anomaly_filters(fake):
     fake.add("COUNT", ["cnt"], [[1]])
-    fake.add("ORDER BY created_at DESC, id DESC", ["id"], [[1]])
+    fake.add("ORDER BY business_date DESC NULLS LAST, created_at DESC, id DESC", ["id"], [[1]])
     diag_repo.list_logs(dimple_only=True, exclude_business=True)
 
     assert len(fake.calls) == 2
     for sql, _params in fake.calls:
         assert "SUBSTR(source, 1, 7) = 'dimple_'" in sql
+        assert "source IS NULL OR source NOT IN" in sql
+
+
+def test_list_logs_realtime_only_matches_dimple_and_iquant(fake):
+    fake.add("COUNT", ["cnt"], [[3]])
+    fake.add("ORDER BY business_date DESC NULLS LAST, created_at DESC, id DESC", ["id"], [[1], [2], [3]])
+    diag_repo.list_logs(realtime_only=True, exclude_business=True)
+
+    assert len(fake.calls) == 2
+    for sql, _params in fake.calls:
+        # 同时包含 Dimple 与 iQuant 两个前缀条件
+        assert "SUBSTR(source, 1, 7) = 'dimple_'" in sql
+        assert "SUBSTR(source, 1, 7) = 'iquant_'" in sql
         assert "source IS NULL OR source NOT IN" in sql
 
 

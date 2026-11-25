@@ -20,6 +20,7 @@ _ENV_PREFIX = {
     "store": "AIOPS_STORE_",
     "schedule": "AIOPS_SCHEDULE_",
     "dimple": "AIOPS_DIMPLE_",
+    "iquant": "AIOPS_IQUANT_",
 }
 
 # 允许被环境变量覆盖的字段（值为环境变量后缀，统一大写下划线）
@@ -41,9 +42,15 @@ _OVERRIDES = {
                "timeout": "TIMEOUT", "interval_minutes": "INTERVAL_MINUTES",
                "page_size": "PAGE_SIZE", "max_pages": "MAX_PAGES",
                "recent_keep": "RECENT_KEEP"},
+    "iquant": {"enabled": "ENABLED", "base_url": "BASE_URL",
+               "username": "USERNAME", "password": "PASSWORD",
+               "client_id": "CLIENT_ID", "client_secret": "CLIENT_SECRET",
+               "timeout": "TIMEOUT", "interval_minutes": "INTERVAL_MINUTES",
+               "page_size": "PAGE_SIZE", "max_pages": "MAX_PAGES",
+               "handle_closed": "HANDLE_CLOSED"},
 }
 
-_BOOL = {"enabled", "execute_kb_sql", "allow_escalation"}
+_BOOL = {"enabled", "execute_kb_sql", "allow_escalation", "handle_closed"}
 _INT = {"timeout", "top", "port", "interval_minutes",
         "lookback_days", "batch_size", "page_size",
         "max_pages", "recent_keep"}

@@ -10,7 +10,11 @@ from ai_ops import rules_store
 # 基线类型 ID 以包内 errors.yaml 为准（20 类型，随文件演进），
 # 测试不再硬编码旧 3 类型，避免类型扩展时误报回归。
 _PKG = pathlib.Path(rules_store.__file__).parent / "assets" / "rules"
-BASE_TYPE_IDS = [t["id"] for t in yaml.safe_load((_PKG / "errors.yaml").read_text(encoding="utf-8"))["types"]]
+# 基线类型 = 通用 errors.yaml + iQuant 事中风控 iquant_errors.yaml，与 load_registries 合并顺序一致
+BASE_TYPE_IDS = [
+    t["id"]
+    for _name in ("errors.yaml", "iquant_errors.yaml")
+    for t in yaml.safe_load((_PKG / _name).read_text(encoding="utf-8"))["types"]]
 
 
 def test_baseline_registries():

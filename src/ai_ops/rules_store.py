@@ -53,9 +53,17 @@ def load_registries():
     types = list(errors.get("types", []))
     noise_kw = list(noise.get("noise_contains", []))
 
+    # 包内 iQuant 事中风控专用类型（与基线 errors 合并，同 id 可被外挂覆盖）
+    iquant = _pkg_yaml("iquant_errors.yaml") or {}
+    if iquant.get("types"):
+        types = _merge_types(types, iquant.get("types", []))
+
     ext_errors = _ext_yaml("errors.yaml")
     if ext_errors:
         types = _merge_types(types, ext_errors.get("types", []))
+    ext_iquant = _ext_yaml("iquant_errors.yaml")
+    if ext_iquant:
+        types = _merge_types(types, ext_iquant.get("types", []))
     ext_noise = _ext_yaml("noise_rules.yaml")
     if ext_noise:
         for kw in ext_noise.get("noise_contains", []):

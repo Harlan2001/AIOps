@@ -1,0 +1,10 @@
+# iQuant 自带证据 runbook：单一发行主体持仓集中度（ISSUER_CONCENTRATION）
+id: rb_iquant_issuer_concentration
+title: 单一发行主体持仓集中度
+steps: []
+default:
+  root: "单一发行主体持仓集中度：触发对象 {objectName} 对单一发行主体的持仓集中度超过阈值（规则 {ruleNo}，业务日期 {trade_date}，已触发 {triggerCount} 次），存在集中度与信用风险。"
+  action:
+    - "统计该发行主体的持仓规模与占比，评估集中度及发行人信用风险"
+    - "通过减持或分散发行人降低集中度，关注发行人评级与负面事件"
+    - "如业务确需维持，走集中度限额审批并加强监控"

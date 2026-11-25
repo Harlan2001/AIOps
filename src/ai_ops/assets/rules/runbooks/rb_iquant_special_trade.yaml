@@ -1,0 +1,10 @@
+# iQuant 自带证据 runbook：特定类型交易监控（SPECIAL_TRADE_MONITOR）
+id: rb_iquant_special_trade
+title: 特定类型交易监控
+steps: []
+default:
+  root: "特定类型交易监控：触发对象 {objectName} 触发特定类型交易监控规则（规则 {ruleNo}，业务日期 {trade_date}，已触发 {triggerCount} 次）。"
+  action:
+    - "核对交易类型、要素与合规要求，确认是否属于需报备或审批的特殊交易"
+    - "检查交易用途与账户是否合规，补齐审批与留痕"
+    - "如属正常业务，确认监控规则口径并持续关注"

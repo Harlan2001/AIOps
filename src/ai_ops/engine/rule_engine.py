@@ -225,8 +225,15 @@ class Engine:
         primary_ok = any(ev["r"]["status"] == "ok" for ev in watch)
         evidence_complete = bool(check_evs) and all(
             ev["r"]["status"] == "ok" for ev in check_evs)
-        res["primary_evidence_ok"] = primary_ok
-        res["evidence_complete"] = evidence_complete
+        if tcfg.get("self_evidence"):
+            # iQuant 告警：证据（命中值/阈值/管控动作）由事件自带，无需业务库 SQL 取证。
+            # 精确关键词命中 + 自带证据即视为主证据成功，置信度由统一规则给 1.0，不在此写死。
+            res["self_evidence"] = True
+            res["primary_evidence_ok"] = True
+            res["evidence_complete"] = True
+        else:
+            res["primary_evidence_ok"] = primary_ok
+            res["evidence_complete"] = evidence_complete
 
         primary = [f for f in failures if f["primary"]]
         if primary:

@@ -43,8 +43,11 @@ def test_registry_yamls_loadable():
 # ---------- 2) types <-> runbooks 映射 ----------
 
 def test_types_runbook_mapping_complete(runbooks):
-    types = yaml.safe_load((RULES / "errors.yaml").read_text(encoding="utf-8"))["types"]
-    assert len(types) == 25  # 新增撤单/基础数据/初始化/报价参数后 25 类（原 21 → 25）
+    # 通用 errors.yaml 25 类 + iQuant 事中风控 iquant_errors.yaml 7 类
+    types = [
+        t for _name in ("errors.yaml", "iquant_errors.yaml")
+        for t in yaml.safe_load((RULES / _name).read_text(encoding="utf-8"))["types"]]
+    assert len(types) == 32  # 基线 25 + iQuant 7
     missing = [t["id"] for t in types if t.get("runbook") not in runbooks]
     assert missing == [], f"types 引用不存在的 runbook: {missing}"
     # 无多余 runbook：每个文件都必须被某个 type 引用
@@ -61,8 +64,17 @@ def test_runbook_filename_matches_id(runbooks):
 # ---------- 3) steps 结构 ----------
 
 def test_steps_structure(runbooks):
+    # 自带证据（iQuant）runbook 无需 SQL 步骤，按其类型注册表识别
+    iquant_types = yaml.safe_load(
+        (RULES / "iquant_errors.yaml").read_text(encoding="utf-8"))["types"]
+    self_evidence_rbs = {t.get("runbook") for t in iquant_types
+                         if t.get("self_evidence")}
     for rb_id, (fn, rb) in runbooks.items():
-        assert rb.get("steps"), f"{fn} 无 steps"
+        if not rb.get("steps"):
+            assert rb_id in self_evidence_rbs, \
+                f"{fn} 无 steps 且未声明为自带证据类型"
+            assert rb.get("default", {}).get("root"), f"{fn} 缺 default.root"
+            continue
         for i, s in enumerate(rb["steps"]):
             miss = {"id", "title", "type", "sql"} - set(s)
             assert not miss, f"{fn} step{i} 缺字段 {miss}"

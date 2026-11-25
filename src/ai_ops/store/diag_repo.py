@@ -64,6 +64,12 @@ def _anomaly_cond():
         "OR (%s))" % (in_list, quota_over))
 
 
+def _realtime_cond():
+    """实时监控来源：Dimple（dimple_ 前缀）或 iQuant（iquant_ 前缀），两者前缀均为 7 字符。"""
+    return ("(SUBSTR(source, 1, 7) = 'dimple_' "
+            "OR SUBSTR(source, 1, 7) = 'iquant_')")
+
+
 def _json_default(o):
     """JSON 兜底：GaussDB NUMERIC 返回 Decimal，时间字段返回 datetime/date。"""
     if isinstance(o, Decimal):
@@ -210,17 +216,22 @@ def _rows_to_dicts(cols, rows):
 
 def list_logs(table=None, source=None, diag_class=None, diag_type=None,
               annot_status=None, start_date=None, end_date=None,
-              offset=0, limit=50, exclude_business=False, dimple_only=False):
-    """按条件分页查询历史诊断（按 id 倒序），返回 {total, items}。
+              offset=0, limit=50, exclude_business=False, dimple_only=False,
+              realtime_only=False):
+    """按条件分页查询历史诊断（按业务日期倒序，最新在前），返回 {total, items}。
 
     exclude_business=True：叠加"仅真实异常"过滤，排除业务数据与未超限记录。
-    dimple_only=True：仅查询 Dimple 来源，避免手工/历史巡检记录混入实时页。
-    历史页两个开关默认均为 False，可查看全部落库记录。
+    dimple_only=True：仅查询 Dimple 来源（保留向后兼容）。
+    realtime_only=True：查询全部实时监控来源（Dimple 或 iQuant），供统一实时页使用，
+    避免手工/历史巡检记录混入。
+    历史页开关默认均为 False，可查看全部落库记录。
     """
     table = table or load_table()
     where, params = [], {}
     if dimple_only:
         where.append("SUBSTR(source, 1, 7) = 'dimple_'")
+    if realtime_only:
+        where.append(_realtime_cond())
     if exclude_business:
         where.append(_anomaly_cond())
 
@@ -251,8 +262,11 @@ def list_logs(table=None, source=None, diag_class=None, diag_type=None,
     qparams["offset"] = int(offset)
     qparams["limit"] = max(1, min(int(limit), 200))
     cols_sql = ", ".join(_LIST_COLS)
+    # 主排序按业务日期（页面展示的时间），最新在前；无业务日期的手工记录置末。
+    # 同一业务日期内再按落库时间、id 倒序兜底，保证分页稳定。
     list_sql = (
-        "SELECT %s FROM %s%s ORDER BY created_at DESC, id DESC "
+        "SELECT %s FROM %s%s "
+        "ORDER BY business_date DESC NULLS LAST, created_at DESC, id DESC "
         "LIMIT :limit OFFSET :offset"
         % (cols_sql, table, where_sql))
     cols, rows = connection.execute_select(list_sql, qparams)

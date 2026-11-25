@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """APScheduler 进程内调度封装（方向一·阶段 1 + Dimple 实时监控）。
 
-同一个 AsyncIOScheduler 管理两类相互独立的 job，各自有配置开关：
+同一个 AsyncIOScheduler 管理三类相互独立的 job，各自有配置开关：
   - aiops_inspection：GaussDB 错误表巡检（schedule.enabled，cron 或固定间隔）；
-  - dimple_realtime ：Dimple 接口实时采集（dimple.enabled，固定间隔，准实时）。
-两者均 max_instances=1 + coalesce，配合各自的进程锁，杜绝任务重叠与补偿堆积。
-两类任务都未启用时返回 None，服务行为与现状完全一致。
+  - dimple_realtime  ：Dimple 接口实时采集（dimple.enabled，固定间隔，准实时）；
+  - iquant_realtime  ：iQuant 事中风控事件实时采集（iquant.enabled，固定间隔，准实时）。
+三者均 max_instances=1 + coalesce，配合各自的进程锁，杜绝任务重叠与补偿堆积。
+所有任务都未启用时返回 None，服务行为与现状完全一致。
 """
 import logging
 
@@ -13,6 +14,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from ..dimple import collector as dimple_collector
+from ..iquant import collector as iquant_collector
 from . import inspector
 
 _logger = logging.getLogger("ai_ops.scheduler")
@@ -51,11 +53,25 @@ def _add_dimple_job(scheduler, svc):
         replace_existing=True)
 
 
+def _add_iquant_job(scheduler, svc):
+    cfg = iquant_collector.load_iquant_config()
+    scheduler.add_job(
+        func=iquant_collector.run_realtime_collection,
+        kwargs={"svc": svc},
+        trigger="interval",
+        minutes=int(cfg.get("interval_minutes") or 5),
+        max_instances=1,
+        coalesce=True,
+        id="iquant_realtime",
+        replace_existing=True)
+
+
 def build_scheduler(svc=None):
-    """按配置创建（未启动的）调度器；两类任务都未启用时返回 None。"""
+    """按配置创建（未启动的）调度器；所有任务都未启用时返回 None。"""
     inspection_on = bool(inspector.load_schedule().get("enabled", False))
     dimple_on = bool(dimple_collector.load_dimple_config().get("enabled", False))
-    if not inspection_on and not dimple_on:
+    iquant_on = bool(iquant_collector.load_iquant_config().get("enabled", False))
+    if not inspection_on and not dimple_on and not iquant_on:
         return None
 
     scheduler = AsyncIOScheduler()
@@ -63,6 +79,8 @@ def build_scheduler(svc=None):
         _add_inspection_job(scheduler, svc)
     if dimple_on:
         _add_dimple_job(scheduler, svc)
+    if iquant_on:
+        _add_iquant_job(scheduler, svc)
     return scheduler
 
 

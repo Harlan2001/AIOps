@@ -316,11 +316,13 @@ def diagnosis_list(request: Request, source: str | None = None,
                    annot_status: str | None = None,
                    start_date: str | None = None, end_date: str | None = None,
                    anomaly_only: bool = False, dimple_only: bool = False,
+                   realtime_only: bool = False,
                    offset: int = 0, limit: int = 50):
     """分页查询历史诊断（支持来源/类型/分类/标注/日期筛选）。
 
     anomaly_only=True：只返回真实异常（排除行情/持仓/资金等业务数据）。
-    dimple_only=True：仅返回 Dimple 来源；两者供实时监控页组合使用，
+    dimple_only=True：仅返回 Dimple 来源（向后兼容）。
+    realtime_only=True：返回全部实时监控来源（Dimple 或 iQuant），供统一实时页使用；
     历史页均不传，默认查看全部。
     """
     try:
@@ -329,7 +331,8 @@ def diagnosis_list(request: Request, source: str | None = None,
             annot_status=annot_status, start_date=start_date,
             end_date=end_date, offset=max(0, offset),
             limit=max(1, min(limit, 200)),
-            exclude_business=anomaly_only, dimple_only=dimple_only)
+            exclude_business=anomaly_only, dimple_only=dimple_only,
+            realtime_only=realtime_only)
     except HTTPException:
         raise
     except Exception as e:  # noqa: BLE001

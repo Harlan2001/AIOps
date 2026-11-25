@@ -130,7 +130,8 @@ class DiagnosticService:
             out["source"] = "规则快速路径（未识别类型，零 token）"
             return out
         primary_ok = bool(rule_res.get("primary_evidence_ok"))
-        confidence = 1.0 if primary_ok else pipeline.LOW_CONFIDENCE
+        # 与 pipeline 完全一致的统一置信度：精确命中+证据成功 1.0，同义词 0.8，模糊 0.6，无证据 0.4
+        confidence = pipeline.rule_confidence(rule_res)
         # 复用 pipeline 的 answer 构造（actions 重命名、secondary、evidence_note）
         out["answer"] = pipeline._rule_answer(rule_res, confidence)
         if primary_ok:

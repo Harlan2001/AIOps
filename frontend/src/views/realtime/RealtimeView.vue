@@ -45,8 +45,8 @@ const hasFilters = computed(() => Boolean(source.value || diagClass.value))
 const emptyDescription = computed(() => {
   if (hasFilters.value) return '没有符合当前来源和分类的记录，请调整筛选'
   return viewMode.value === 'anomaly'
-    ? '暂无真实异常。Dimple 产生需要关注的报错或告警后会显示在这里。'
-    : '当前没有 Dimple 落库记录'
+    ? '暂无真实异常。Dimple 或 iQuant 产生需要关注的报错或告警后会显示在这里。'
+    : '当前没有实时落库记录'
 })
 
 const columns = [
@@ -232,7 +232,7 @@ function scrollToLlm() {
   <div class="page-shell">
     <PageHeader
       title="实时异常"
-      description="查看 Dimple 采集并落库的诊断记录。页面只负责刷新已保存的数据，实际采集频率由后端调度配置决定。"
+      description="查看 Dimple 与 iQuant 采集并落库的诊断记录。页面只负责刷新已保存的数据，实际采集频率由后端调度配置决定。"
     >
       <template #extra>
         <a-button :loading="loading && !backgroundLoading" @click="load(false)"><ReloadOutlined /> 立即刷新</a-button>
@@ -256,7 +256,7 @@ function scrollToLlm() {
           show-search
           option-filter-prop="label"
           :options="sourceOptions"
-          placeholder="全部 Dimple 来源"
+          placeholder="全部实时来源"
           class="source-filter"
           @change="onFilterChange"
         />
