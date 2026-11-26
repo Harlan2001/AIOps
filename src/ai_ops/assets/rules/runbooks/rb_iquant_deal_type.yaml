@@ -1,0 +1,10 @@
+# iQuant 自带证据 runbook：成交类型异常（DEAL_TYPE_ABNORMAL）
+id: rb_iquant_deal_type
+title: 成交类型异常
+steps: []
+default:
+  root: "成交类型异常：触发对象 {objectName} 的成交类型与预期不符（规则 {ruleNo}，业务日期 {trade_date}，已触发 {triggerCount} 次），可能存在录入错误或违规。"
+  action:
+    - "核对成交类型标识与实际成交要素，确认是否为录入或配置错误"
+    - "检查交易链路的成交类型映射是否正确"
+    - "如为异常成交，评估对冲与账务影响并按流程处理，修正类型配置避免再次发生"

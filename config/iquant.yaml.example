@@ -1,0 +1,42 @@
+# iQuant 固收量化系统实时监控对接配置（接口级拉模式，准实时）
+# 用法：复制本文件为 iquant.yaml，按需修改；iquant.yaml 含口令，不入库，由部署方注入。
+#   copy config\iquant.yaml.example config\iquant.yaml
+# 也可用环境变量 AIOPS_IQUANT_* 覆盖（建议口令走环境变量，不写明文）。
+#
+# enabled：实时监控总开关。
+#   false（默认）：不启动实时采集，服务行为与现状一致；
+#   true ：FastAPI 启动时在进程内创建定时任务，按 interval_minutes 拉取 iQuant 事件接口。
+enabled: false
+
+# iQuant 平台基础地址（接口网关根，不含具体业务路径）。
+base_url: "http://10.242.184.55:1080"
+
+# 登录账号与口令（iQuant 登录为明文提交，不做 RSA 加密；
+# 口令建议用环境变量 AIOPS_IQUANT_PASSWORD 注入，不在此留明文）。
+username: "admin"
+password: ""
+
+# OAuth2 客户端凭证（对应登录请求头 Basic base64(client_id:client_secret)）。
+client_id: "testjwtclientid"
+client_secret: "XY7kmzoNzl100"
+
+# 单次 HTTP 超时（秒）。
+timeout: 10
+
+# 拉取间隔（分钟）：准实时，建议 1-5；越小越接近实时，注意不要给对方造成压力。
+interval_minutes: 5
+
+# 分页大小（接口校验 1-100）与每次采集的最大页数（硬上限，防止异常数据量导致无限拉取）。
+# 达到上限仍有后续页时，采集摘要返回 truncated=true 并记录告警，下轮从持久化的下一页继续。
+page_size: 100
+max_pages: 200
+
+# 是否处理已闭环事件：
+#   false（默认）：只诊断未闭环事件（NEW/NOTIFIED），HANDLED/IGNORED 跳过且不写游标；
+#   true ：HANDLED/IGNORED 也纳入诊断（此前跳过的事件可在后续轮次补采）。
+handle_closed: false
+
+# 未闭环事件状态白名单（handle_closed=false 时生效，可按部署需要调整）。
+open_statuses:
+  - NEW
+  - NOTIFIED

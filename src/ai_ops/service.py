@@ -130,7 +130,8 @@ class DiagnosticService:
             out["source"] = "规则快速路径（未识别类型，零 token）"
             return out
         primary_ok = bool(rule_res.get("primary_evidence_ok"))
-        confidence = 1.0 if primary_ok else pipeline.LOW_CONFIDENCE
+        # 与 pipeline 完全一致的统一置信度：精确命中+证据成功 1.0，同义词 0.8，模糊 0.6，无证据 0.4
+        confidence = pipeline.rule_confidence(rule_res)
         # 复用 pipeline 的 answer 构造（actions 重命名、secondary、evidence_note）
         out["answer"] = pipeline._rule_answer(rule_res, confidence)
         if primary_ok:
@@ -145,8 +146,10 @@ class DiagnosticService:
         只有 telemetry.path == 'llm'（真正由 LLM 给出结论）才计为升级；
         规则快路径或 LLM 不可用的规则兜底均不计入 LLM 升级数。
         """
+        # 显式升级：传 force_llm=True 以跳过规则快速路径、真正调用 LLM；
+        # LLM 未配置/调用失败时 pipeline 内部仍会优雅回退到规则结论。
         out = pipeline.diagnose(
-            rec, eng=self.eng, kbcli=self.kb, llm=self.llm)
+            rec, force_llm=True, eng=self.eng, kbcli=self.kb, llm=self.llm)
         telemetry = out.get("telemetry") or {}
         out["escalated"] = telemetry.get("path") == "llm"
         return out
@@ -172,15 +175,18 @@ class DiagnosticService:
         return self.diagnose_rule_only(rec)
 
     def _persist(self, rec, out, ctx):
-        """统一 best-effort 落库；落库失败由 persist 内部吞掉，不影响诊断。"""
+        """统一 best-effort 落库；失败不抛异常，但在结果内标记供采集层重试。"""
         ctx = ctx or {}
         trigger_type = ctx.get("trigger_type") or "manual"
         batch_id = ctx.get("batch_id")
         is_error = isinstance(out, dict) and bool(out.get("_diagnose_error"))
-        persist.persist_diagnosis(
+        persisted = persist.persist_diagnosis(
             rec, out, trigger_type, batch_id=batch_id,
             diag_status="error" if is_error else "success",
             error_msg=out.get("_diagnose_error") if is_error else None)
+        if persisted is False and isinstance(out, dict):
+            # 数据库临时故障时不能让实时采集把该事件永久标记为已处理。
+            out["_persist_error"] = "诊断结果落库失败"
 
     def diagnose_many(self, recs):
         """批量诊断（纯规则），返回 [(record, contract_result), ...]。"""

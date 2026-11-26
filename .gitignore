@@ -1,8 +1,11 @@
-# ===== 敏感配置：真实配置不入库，仅提交对应的 *.example 模板 =====
+# ===== 敏感配置（含 API Key / 数据库口令，切勿提交；仓库只保留 *.example 模板）=====
+.env
+config/llm.yaml
+config/kb.yaml
 config/db.yaml
 config/dimple.yaml
-config/kb.yaml
-config/llm.yaml
+config/iquant.yaml
+config/store.yaml
 config/schedule.yaml
 config/store.yaml
 
@@ -41,6 +44,15 @@ venv/
 *.egg-info/
 .eggs/
 
+# ===== 本地演示/验证临时输出（不入库）=====
+/demo_*.txt
+
+# ===== 前端本地排查/调试临时脚本与输出（不入库）=====
+frontend/var_*
+
+# ===== 本地汇报材料（个人使用，不入库）=====
+docs/AIOps汇报演讲稿与演示手册.md
+docs/Dimple实时监控对接-工作汇报.md
 # ===== 测试、覆盖率与质量工具 =====
 .pytest_cache/
 .coverage

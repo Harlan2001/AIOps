@@ -1,0 +1,63 @@
+# iQuant 事中风控（日间异常风控事件）类型注册（运行时零模型）
+# 与 errors.yaml 的区别：iQuant 事件是上游风控系统已判定、证据自带的离散告警，
+# 无需再用业务库 SQL 反查根因，故每个类型标记 self_evidence: true，
+# 精确关键词命中即按事件自带字段给出确定性结论；置信度走统一规则（精确命中即 1.0），不在此写死。
+# 关键词取采集文本“风控项 xxx”中稳定出现的中文短语，7 类互不重叠；
+# 后续出现新的未识别风控项时，在此补类型并在 runbooks/ 补对应 runbook，即可让其可匹配。
+version: "1.0"
+types:
+  - id: iquant_quote_market_deviation
+    title: 在市报价市场偏离
+    severity: warn
+    self_evidence: true
+    keywords: ["在市报价市场偏离"]
+    err_codes: []
+    runbook: rb_iquant_quote_deviation
+
+  - id: iquant_position_swing
+    title: 交易头寸大幅波动
+    severity: warn
+    self_evidence: true
+    keywords: ["交易头寸大幅波动"]
+    err_codes: []
+    runbook: rb_iquant_position_swing
+
+  - id: iquant_manual_price_change
+    title: 手动修改报价
+    severity: warn
+    self_evidence: true
+    keywords: ["手动修改报价"]
+    err_codes: []
+    runbook: rb_iquant_manual_price
+
+  - id: iquant_issuer_concentration
+    title: 单一发行主体持仓集中度
+    severity: warn
+    self_evidence: true
+    keywords: ["单一发行主体持仓集中度"]
+    err_codes: []
+    runbook: rb_iquant_issuer_concentration
+
+  - id: iquant_bulk_click_deal
+    title: 报价被批量点击成交
+    severity: warn
+    self_evidence: true
+    keywords: ["报价被批量点击成交"]
+    err_codes: []
+    runbook: rb_iquant_bulk_click
+
+  - id: iquant_special_trade
+    title: 特定类型交易监控
+    severity: warn
+    self_evidence: true
+    keywords: ["特定类型交易监控"]
+    err_codes: []
+    runbook: rb_iquant_special_trade
+
+  - id: iquant_deal_type_abnormal
+    title: 成交类型异常
+    severity: warn
+    self_evidence: true
+    keywords: ["成交类型异常"]
+    err_codes: []
+    runbook: rb_iquant_deal_type

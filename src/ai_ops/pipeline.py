@@ -29,6 +29,26 @@ def _loc_str(loc):
 
 # 主检查无成功取证时的降级置信度（结论仍可参考，但必须显式标注证据不完整）
 LOW_CONFIDENCE = 0.4
+# 本地语义召回（取证成功）的置信度：口语同义词略低于精确关键词，模糊匹配更低并建议复核
+SEMANTIC_CONFIDENCE = {"synonym": 0.8, "fuzzy": 0.6}
+
+
+def rule_confidence(rule_res):
+    """统一置信度（Dimple / iQuant 通用，零模型）：
+    - 精确关键词命中且主证据成功（Dimple 查库取证 / iQuant 事件自带证据）= 1.0；
+    - 同义词召回且主证据成功 = 0.8；字符模糊召回且主证据成功 = 0.6；
+    - 未识别类型、或任何命中方式下主证据无成功取证 = 0.4。
+
+    语义召回同样受证据门约束：命中方式不能绕过 B8 的缺证降级。
+    """
+    if not rule_res.get("type"):
+        return LOW_CONFIDENCE
+    if not rule_res.get("primary_evidence_ok"):
+        return LOW_CONFIDENCE
+    match_kind = rule_res.get("match_kind")
+    if match_kind in SEMANTIC_CONFIDENCE:
+        return SEMANTIC_CONFIDENCE[match_kind]
+    return 1.0
 
 
 def _evidence_note(rule_res):
@@ -48,7 +68,7 @@ def _evidence_note(rule_res):
 
 
 def _rule_answer(rule_res, confidence):
-    """从规则引擎结果构造 answer；证据不完整时附 evidence_note。"""
+    """从规则引擎结果构造 answer；证据不完整/语义召回时附 evidence_note。"""
     ans = {
         "root": rule_res.get("root"),
         "actions": rule_res.get("action", []),
@@ -56,6 +76,17 @@ def _rule_answer(rule_res, confidence):
         "secondary": rule_res.get("secondary", []),
     }
     note = _evidence_note(rule_res)
+    # 语义召回标注：非精确关键词命中，显式告知来源与复核建议
+    kind = rule_res.get("match_kind")
+    if kind == "synonym":
+        sem_note = "口语同义词召回（非标准关键词命中），请结合取证结果复核"
+        ans["match_kind"] = kind
+        note = (note + "；" + sem_note) if note else sem_note
+    elif kind == "fuzzy":
+        sem_note = "字符模糊匹配召回（相似度 %s），建议人工复核" % rule_res.get(
+            "semantic_score")
+        ans["match_kind"] = kind
+        note = (note + "；" + sem_note) if note else sem_note
     if note:
         ans["evidence_note"] = note
     return ans
@@ -95,7 +126,8 @@ def diagnose(rec, force_llm=False, force_fast=False, llm=None, *,
         primary_ok = bool(rule_res.get("primary_evidence_ok"))
         rule_hit = verdict_done and primary_ok
         degraded = verdict_done and not primary_ok
-        confidence = 1.0 if rule_hit else LOW_CONFIDENCE
+        # 统一置信度规则：精确命中+主证据成功=1.0，同义词 0.8，模糊 0.6，未识别/无取证 0.4
+        confidence = rule_confidence(rule_res)
         type_id = (rule_res.get("type") or {}).get("id")
 
         result = {"text": text, "errcode": errcode, "ldate": ldate,

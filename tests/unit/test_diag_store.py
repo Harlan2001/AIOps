@@ -103,7 +103,7 @@ def test_persist_enabled_calls_upsert(monkeypatch):
     calls = []
     monkeypatch.setattr(diag_repo, "upsert_log",
                         lambda entry, table=None: calls.append(entry))
-    persist.persist_diagnosis({"text": "x"}, _envelope(), "scheduled")
+    assert persist.persist_diagnosis({"text": "x"}, _envelope(), "scheduled") is True
     assert len(calls) == 1
 
 
@@ -126,8 +126,18 @@ def test_persist_swallows_errors(monkeypatch):
         raise RuntimeError("db down")
 
     monkeypatch.setattr(diag_repo, "save_log", _boom)
-    # 手工路径落库失败也不抛异常
-    assert persist.persist_diagnosis({}, _envelope(), "manual") is None
+    # 手工路径落库失败不抛异常，但显式返回 False 供实时采集留待重试
+    assert persist.persist_diagnosis({}, _envelope(), "manual") is False
+
+
+def test_service_marks_persist_error_without_raising(monkeypatch):
+    from ai_ops.service import DiagnosticService
+
+    monkeypatch.setattr(persist, "persist_diagnosis", lambda *a, **k: False)
+    svc = object.__new__(DiagnosticService)  # 无需初始化 Engine/KB/LLM
+    out = _envelope()
+    svc._persist({"text": "x"}, out, {"trigger_type": "scheduled"})
+    assert out["_persist_error"] == "诊断结果落库失败"
 
 
 def test_is_enabled_returns_false_on_config_error(monkeypatch):
@@ -200,20 +210,27 @@ def test_stats_uses_single_snapshot(monkeypatch):
     assert out["annotated"] == 3
 
 
-def test_escalated_core_marks_actual_llm_path(monkeypatch):
+def test_escalated_core_forces_llm_and_marks_actual_path(monkeypatch):
     from ai_ops import pipeline
     from ai_ops.service import DiagnosticService
 
-    def _fake(rec, **kw):
-        return {"telemetry": {"path": kw.pop("path", "rule_fast")}}
+    captured = {}
 
-    monkeypatch.setattr(pipeline, "diagnose",
-                        lambda rec, **kw: {"telemetry": {"path": "rule_fast"}})
+    def _fake(rec, **kw):
+        captured.update(kw)
+        return {"telemetry": {"path": "rule_fast"}}
+
+    monkeypatch.setattr(pipeline, "diagnose", _fake)
     svc = DiagnosticService()
     out = svc._escalated_core({"text": "x"})
+    # 升级入口必须显式传 force_llm=True，否则规则命中会被快速路径拦截、永远不调 LLM
+    assert captured.get("force_llm") is True
     assert out["escalated"] is False
-    monkeypatch.setattr(pipeline, "diagnose",
-                        lambda rec, **kw: {"telemetry": {"path": "llm"}})
+
+    def _fake_llm(rec, **kw):
+        return {"telemetry": {"path": "llm"}}
+
+    monkeypatch.setattr(pipeline, "diagnose", _fake_llm)
     assert svc._escalated_core({"text": "x"})["escalated"] is True
 
 

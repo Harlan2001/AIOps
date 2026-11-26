@@ -193,7 +193,10 @@ types:
   - id: self_trade_alert
     title: 自成交次数预警
     severity: warn
-    keywords: ["自成交次数", "预警阀值", "自成交预警", "自成交统计"]
+    # 含“自成交”的具体预警短语也登记为精确关键词：match_type 以最长命中词决胜，
+    # 避免被通用 self_trade 的短词“自成交”抢先路由（语义层仅在精确未命中时兜底）。
+    keywords: ["自成交次数", "预警阀值", "自成交预警", "自成交统计",
+               "自成交太多", "自成交次数到上限", "对倒次数超限", "自成交达到阀值"]
     err_codes: []
     param_alias:
       "会员": "member"

@@ -15,31 +15,31 @@ describe('getRealtimeAlarms', () => {
     mocks.getDiagnoses.mockResolvedValue({ total: 0, items: [] })
   })
 
-  it('默认仅查询 Dimple 真实异常', async () => {
+  it('默认查询全部实时来源的真实异常', async () => {
     await getRealtimeAlarms()
 
     expect(mocks.getDiagnoses).toHaveBeenCalledWith({
       offset: 0,
       limit: 20,
       anomaly_only: true,
-      dimple_only: true,
+      realtime_only: true,
     })
   })
 
-  it('全部记录模式仍限定 Dimple 来源', async () => {
+  it('全部记录模式仍限定实时来源', async () => {
     await getRealtimeAlarms(20, 10, false)
 
     expect(mocks.getDiagnoses).toHaveBeenCalledWith({
       offset: 20,
       limit: 10,
       anomaly_only: false,
-      dimple_only: true,
+      realtime_only: true,
     })
   })
 
-  it('叠加来源与分类筛选时保留 Dimple 和异常语义', async () => {
+  it('叠加来源与分类筛选时保留实时和异常语义', async () => {
     await getRealtimeAlarms(0, 10, true, {
-      source: 'dimple_compliance_alarm',
+      source: 'iquant_day_abnormal_event',
       diag_class: 'biz',
     })
 
@@ -47,8 +47,8 @@ describe('getRealtimeAlarms', () => {
       offset: 0,
       limit: 10,
       anomaly_only: true,
-      dimple_only: true,
-      source: 'dimple_compliance_alarm',
+      realtime_only: true,
+      source: 'iquant_day_abnormal_event',
       diag_class: 'biz',
     })
   })

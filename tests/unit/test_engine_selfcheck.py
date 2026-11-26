@@ -14,6 +14,10 @@ CASES = [
     ("平仓错误,[会员->016811][客户->0000000168][合约->Au(T+N1)][买]持仓不足,尚缺<1>", 101028602, "position_not_enough"),
     ("[交易员=>trader1]库存量不足，不允许分配", 101028602, "biz_unmatched"),  # 不应误判持仓
     ("系统不存在该条记录,存续期变更失败", 100007602, "biz_unmatched"),       # 尚未配规则
+    ("事中风控告警已恢复", 0, "noise"),  # 恢复通知优先于全局“告警”错误词
+    ("告警处理成功", 0, "noise"),
+    ("告警已经恢复", 0, "noise"),
+    ("告警已恢复，但交易失败", 0, "biz_unmatched"),  # 同时有真实错误词仍按业务错误
 ]
 
 
@@ -33,3 +37,8 @@ def test_classify_and_match(eng, text, errcode, expect):
     else:
         got = cls
     assert got == expect
+
+
+def test_iquant_closed_status_is_not_recovered_noise(eng):
+    # “已处理”是 iQuant 闭环事件状态，不应当作“告警已恢复”噪音吞掉。
+    assert eng._classify("事中风控告警：测试，事件状态 已处理", 0) == "biz"

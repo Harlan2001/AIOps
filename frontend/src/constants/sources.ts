@@ -54,14 +54,23 @@ const DIMPLE_SOURCES: SourceOption[] = [
   { id: 'dimple_trader_qty_weight_limit', label: 'Dimple 交易员数量重量限额（实时）' },
 ]
 
+const IQUANT_SOURCES: SourceOption[] = [
+  { id: 'iquant_day_abnormal_event', label: 'iQuant 事中风控事件（实时）' },
+]
+
 // 历史与实时日志筛选可以查看全部来源，与诊断取数来源严格分开。
-export const LOG_SOURCES: SourceOption[] = [...DIAGNOSE_SOURCES, ...DIMPLE_SOURCES]
+export const LOG_SOURCES: SourceOption[] = [
+  ...DIAGNOSE_SOURCES,
+  ...DIMPLE_SOURCES,
+  ...IQUANT_SOURCES,
+]
 export const SOURCE_LABELS: Record<string, string> = Object.fromEntries(
   LOG_SOURCES.map((item) => [item.id, item.label]),
 )
 
-// Dimple 实时监控来源 id -> 中文标签（实时页展示用）。
+// 实时监控来源 id -> 中文标签（实时页展示用，含 Dimple 与 iQuant）。
 export const REALTIME_SOURCE_LABELS: Record<string, string> = {
+  iquant_day_abnormal_event: 'iQuant 事中风控事件',
   dimple_compliance_alarm: '合规预警',
   dimple_self_deal: '自成交',
   dimple_violation_order: '违规委托',

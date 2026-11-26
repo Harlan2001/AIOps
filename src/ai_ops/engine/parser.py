@@ -24,8 +24,8 @@ _CN_RE = re.compile(r"[\u4e00-\u9fff]")
 # 定时任务流水类"假 ERROR"（成功/无数据/完成）
 NOISE_KW = ("成功", "完成", "启动", "恢复", "无需要发送", "已处理", "已恢复")
 # 真正的业务报错词
-ERROR_KW = ("不存在", "失败", "异常", "错误", "不允许", "不可", "不足", "不够", "不能为空", "不能",
-            "冲突", "超时", "重复", "非法", "无法", "请检查", "未", "没有", "不一致", "不匹配")
+ERROR_KW = ("不存在", "失败", "异常", "错误", "告警", "不允许", "不可", "不足", "不够", "不能为空",
+            "不能", "冲突", "超时", "重复", "非法", "无法", "请检查", "未", "没有", "不一致", "不匹配")
 
 
 def is_chinese(text):
@@ -43,6 +43,22 @@ def is_tech_error(text):
 
 # 向后兼容别名
 is_ora = is_tech_error
+
+
+def is_routine_alarm(text, noise_kw=None):
+    """识别“告警处理成功/已经恢复”等例行通知，保持全局“告警”加入前的噪音语义。
+
+    仅在除“告警”外没有其他错误词、且命中既有噪音词时成立。iQuant 的
+    “事件状态 已处理/已忽略”是闭环告警本身，不属于例行通知，必须继续诊断。
+    """
+    t = text or ""
+    if "告警" not in t:
+        return False
+    if any(k in t for k in ERROR_KW if k != "告警"):
+        return False
+    if "事件状态" in t and any(k in t for k in ("已处理", "已忽略")):
+        return False
+    return any(k in t for k in (noise_kw or NOISE_KW))
 
 
 def normalize_skeleton(text):
@@ -102,6 +118,8 @@ def classify(text, errcode=0):
         return "ora"
     if not is_chinese(t):
         return "other"
+    if is_routine_alarm(t):
+        return "noise"
     if any(k in t for k in ERROR_KW):
         return "biz"
     if errcode and errcode != 0:

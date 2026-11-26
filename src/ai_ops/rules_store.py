@@ -6,6 +6,7 @@
 - 类型注册表 errors.yaml：types 数组按 id 合并——外挂同 id 整条替换、
   新 id 追加到基线之后（只放外挂注册表不会丢基线类型）；
 - noise_rules.yaml：noise_contains 数组去重追加；
+- synonyms.yaml：synonyms 按类型 id 合并——外挂同 id 短语列表整体替换，新 id 追加；
 - 外挂目录不存在时行为与纯包内基线完全一致。
 """
 import os
@@ -53,15 +54,34 @@ def load_registries():
     types = list(errors.get("types", []))
     noise_kw = list(noise.get("noise_contains", []))
 
+    # 包内 iQuant 事中风控专用类型（与基线 errors 合并，同 id 可被外挂覆盖）
+    iquant = _pkg_yaml("iquant_errors.yaml") or {}
+    if iquant.get("types"):
+        types = _merge_types(types, iquant.get("types", []))
+
     ext_errors = _ext_yaml("errors.yaml")
     if ext_errors:
         types = _merge_types(types, ext_errors.get("types", []))
+    ext_iquant = _ext_yaml("iquant_errors.yaml")
+    if ext_iquant:
+        types = _merge_types(types, ext_iquant.get("types", []))
     ext_noise = _ext_yaml("noise_rules.yaml")
     if ext_noise:
         for kw in ext_noise.get("noise_contains", []):
             if kw not in noise_kw:
                 noise_kw.append(kw)
     return types, noise_kw
+
+
+def load_synonyms():
+    """返回 {类型 id: [口语短语...]}；外挂同 id 列表整体覆盖，新 id 追加。"""
+    data = _pkg_yaml("synonyms.yaml") or {}
+    out = {k: list(v or []) for k, v in (data.get("synonyms") or {}).items()}
+    ext = _ext_yaml("synonyms.yaml")
+    if ext:
+        for type_id, phrases in (ext.get("synonyms") or {}).items():
+            out[type_id] = list(phrases or [])
+    return out
 
 
 def load_runbook(name):

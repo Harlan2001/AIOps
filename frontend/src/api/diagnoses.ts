@@ -16,6 +16,7 @@ export interface DiagListParams {
   end_date?: string
   anomaly_only?: boolean
   dimple_only?: boolean
+  realtime_only?: boolean
   offset?: number
   limit?: number
 }

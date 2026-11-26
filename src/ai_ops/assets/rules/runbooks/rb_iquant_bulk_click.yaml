@@ -1,0 +1,10 @@
+# iQuant 自带证据 runbook：报价被批量点击成交（BULK_CLICK_DEAL）
+id: rb_iquant_bulk_click
+title: 报价被批量点击成交
+steps: []
+default:
+  root: "报价被批量点击成交：触发对象 {objectName} 的报价在短时间内被对手方批量点击成交（规则 {ruleNo}，业务日期 {trade_date}，已触发 {triggerCount} 次），可能被套利或报价过优。"
+  action:
+    - "核对批量成交的对手方、价格与数量，判断是否存在恶意点击或套利"
+    - "检查报价是否显著优于市场、行情是否延迟；必要时撤单或调整报价"
+    - "确认自动撤单防护是否生效，完善批量点击成交的风控规则"

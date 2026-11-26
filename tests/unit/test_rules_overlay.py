@@ -9,7 +9,11 @@ from ai_ops import rules_store
 # 基线类型 ID 以包内 errors.yaml 为准（20 类型，随文件演进），
 # 测试不再硬编码旧 3 类型，避免类型扩展时误报回归。
 _PKG = pathlib.Path(rules_store.__file__).parent / "assets" / "rules"
-BASE_TYPE_IDS = [t["id"] for t in yaml.safe_load((_PKG / "errors.yaml").read_text(encoding="utf-8"))["types"]]
+# 基线类型 = 通用 errors.yaml + iQuant 事中风控 iquant_errors.yaml，与 load_registries 合并顺序一致
+BASE_TYPE_IDS = [
+    t["id"]
+    for _name in ("errors.yaml", "iquant_errors.yaml")
+    for t in yaml.safe_load((_PKG / _name).read_text(encoding="utf-8"))["types"]]
 
 
 def test_baseline_registries():
@@ -57,6 +61,21 @@ def test_overlay_noise_dedup_append(tmp_path, monkeypatch):
     _, noise = rules_store.load_registries()
     assert "__全新噪音关键词__" in noise
     assert len(noise) == len(base_noise) + 1  # 基线词去重不重复追加
+
+
+def test_overlay_synonyms_same_id_replace_new_appends(tmp_path, monkeypatch):
+    base = rules_store.load_synonyms()
+    type_id = next(iter(base))
+    (tmp_path / "synonyms.yaml").write_text(
+        "synonyms:\n"
+        "  %s: [\"外挂替换说法\"]\n"
+        "  brand_new_type: [\"外挂新增说法\"]\n" % type_id,
+        encoding="utf-8")
+    monkeypatch.setenv("AIOPS_RULES_DIR", str(tmp_path))
+
+    merged = rules_store.load_synonyms()
+    assert merged[type_id] == ["外挂替换说法"]
+    assert merged["brand_new_type"] == ["外挂新增说法"]
 
 
 def test_overlay_runbook_file_overrides_package(tmp_path, monkeypatch):

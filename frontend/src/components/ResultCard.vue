@@ -117,6 +117,8 @@ async function copyConclusion() {
           <StatusTag :label="sourceLabel" :tone="sourceTone" />
           <StatusTag v-if="ruleRes?.class" :status="ruleRes.class" />
           <a-tag v-if="ruleRes?.type?.title" color="blue">{{ ruleRes.type.title }}</a-tag>
+          <a-tag v-if="answer?.match_kind === 'synonym'" color="cyan">口语化语义召回</a-tag>
+          <a-tag v-else-if="answer?.match_kind === 'fuzzy'" color="orange">模糊匹配·建议复核</a-tag>
         </div>
         <a-button type="text" size="small" @click="copyConclusion">
           <CopyOutlined /> 复制结论
@@ -249,7 +251,7 @@ async function copyConclusion() {
           <div><dt>问题类型</dt><dd>{{ ruleRes?.type?.title || labelNull(ruleRes?.type?.id) }}</dd></div>
           <div class="metadata-wide"><dt>结论来源</dt><dd>{{ result.source || sourceLabel }}</dd></div>
           <div v-if="showInput" class="metadata-wide"><dt>原始报错</dt><dd class="raw-input">{{ result.text || '—' }}</dd></div>
-          <div v-if="result.report" class="metadata-wide"><dt>文本报告</dt><dd><pre class="raw-details">{{ result.report }}</pre></dd></div>
+          <div v-if="result.report" class="metadata-wide"><dt>文本报告</dt><dd class="raw-details"><pre class="raw-details">{{ result.report }}</pre></dd></div>
         </dl>
       </a-collapse-panel>
     </a-collapse>

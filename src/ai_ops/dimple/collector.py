@@ -410,6 +410,37 @@ def _lookup_member(exch_code, trader_no):
     return d.get("member_id"), d.get("client_id")
 
 
+# Dimple 接口原始英文字段（驼峰） -> 诊断 runbook 标准绑定参数名。
+# 错单等通用端点的原始字段是英文名，而 runbook 里多为简写参数（如 :contract），
+# 在适配层统一归一，避免主证据因缺参而无法查库、置信度被误降。
+FIELD_ALIASES = {
+    "contractId": ("contract",),
+    "memberId": ("member",),
+    "clientId": ("client",),
+    "traderNo": ("trader",),
+    "varietyId": ("variety",),
+    "exchCode": ("exch",),
+    "marketType": ("market",),
+    "purposeCode": ("purpose",),
+    "price": ("order_price",),
+}
+
+
+def _apply_field_aliases(params, raw):
+    """把原始英文字段的值补写到 runbook 期望的标准参数名。
+
+    仅在目标键缺失或为空时补写，不覆盖已有的会员反查结果；原始字段保留在
+    params 中（如 :contractId 仍可被对应 runbook 使用）。"""
+    for src, targets in FIELD_ALIASES.items():
+        val = raw.get(src)
+        if val in (None, ""):
+            continue
+        for tgt in targets:
+            if params.get(tgt) in (None, ""):
+                params[tgt] = val
+    return params
+
+
 def normalize_record(ep, raw):
     """把一条接口原始记录映射为诊断标准输入，返回 (record, fingerprint)。
 
@@ -432,6 +463,8 @@ def normalize_record(ep, raw):
             params["member"] = member
         if client:
             params["client"] = client
+    # 英文字段归一到 runbook 标准参数（contractId -> contract 等），不覆盖已有值。
+    _apply_field_aliases(params, raw)
     record = {
         "text": text,
         "ldate": ldate,
@@ -588,9 +621,12 @@ def run_realtime_collection(svc=None):
                 recs, _ctx={"trigger_type": "scheduled",
                             "batch_id": batch_id})
             for (record, result), (_rec, fp, lk) in zip(pairs, pending):
-                if isinstance(result, dict) and result.get("_diagnose_error"):
+                diagnose_error = isinstance(result, dict) and result.get("_diagnose_error")
+                persist_error = isinstance(result, dict) and result.get("_persist_error")
+                if diagnose_error or persist_error:
+                    # 与 iQuant 一致：临时诊断/落库故障不推进游标，恢复后重试。
                     diag_errors += 1
-                # 诊断完成后再标记游标，异常条目也标记，避免下轮反复重试同一条。
+                    continue
                 cursor.mark(ep_id, fp, lk)
 
         summary["endpoints"][ep_id] = {

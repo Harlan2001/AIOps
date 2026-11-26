@@ -7,6 +7,7 @@ from collections import defaultdict
 from ai_ops import rules_store
 from ai_ops.engine import parser as P
 from ai_ops.engine.db import query
+from ai_ops.engine.semantic import SemanticMatcher
 
 _BIND_RE = re.compile(r"(?<!:):([A-Za-z_]\w*)")
 
@@ -15,6 +16,8 @@ class Engine:
     def __init__(self):
         self.types, self.noise_kw = rules_store.load_registries()
         self._runbooks = {}
+        # 本地语义召回（同义词 + 字符 bigram），仅在精确关键词未命中时兜底
+        self._semantic = SemanticMatcher(self.types)
         self._warmup()
 
     def _warmup(self):
@@ -46,6 +49,9 @@ class Engine:
             return "ora"
         if not P.is_chinese(text):
             return "other"
+        # 例行成功/恢复通知先于全局“告警”错误词，保持既有噪音语义。
+        if P.is_routine_alarm(text, self.noise_kw):
+            return "noise"
         if any(k in text for k in P.ERROR_KW):
             return "biz"
         if errcode and errcode != 0:
@@ -86,6 +92,20 @@ class Engine:
             if best_key is None or key > best_key:
                 best, best_key = t, key
         return best, (best_key[0] if best_key else 0)
+
+    def match_with_meta(self, text, errcode):
+        """精确关键词优先；未命中再走本地语义召回。
+
+        返回 (type_cfg, score, meta)；meta 含 match_kind（keyword/synonym/fuzzy）
+        与 semantic_score（语义层相似度，精确命中时为 None）。
+        """
+        t, score = self.match_type(text, errcode)
+        if t is not None:
+            return t, score, {"match_kind": "keyword", "semantic_score": None}
+        t2, kind, sscore = self._semantic.match(text)
+        if t2 is not None:
+            return t2, 0, {"match_kind": kind, "semantic_score": sscore}
+        return None, 0, {"match_kind": None, "semantic_score": None}
 
     def _build_params(self, raw, ldate, type_cfg, rb, base=None):
         # 基础：错误记录自带的业务字段（member/client/contract/trader...）
@@ -152,18 +172,17 @@ class Engine:
         if res["class"] == "ora":
             res["verdict"] = "数据库技术错误（SQLSTATE/基础设施，本期不诊断，建议转 DBA/运维）"
             return res
-        if res["class"] == "other":
-            # 报警/提示类文本（不含"失败/异常/错误"等词）也会归入 other，
-            # 仍尝试类型匹配，匹配不上再走兜底，让报警通用模板有机会命中。
-            tcfg, score = self.match_type(text, errcode)
-            if not tcfg:
+        # 精确关键词未命中时，match_with_meta 会再尝试本地语义召回（同义词/模糊）
+        tcfg, score, meta = self.match_with_meta(text, errcode)
+        if not tcfg:
+            if res["class"] == "other":
                 res["verdict"] = "未识别类型，进入通用兜底 / 回流待补规则"
-                return res
-        else:
-            tcfg, score = self.match_type(text, errcode)
-            if not tcfg:
+            else:
                 res["verdict"] = "业务报错但未匹配规则，进入兜底 / 回流待补规则"
-                return res
+            return res
+        # 记录匹配方式：keyword 精确 / synonym 口语同义词 / fuzzy 字符模糊
+        res["match_kind"] = meta["match_kind"]
+        res["semantic_score"] = meta["semantic_score"]
 
         rb = self._load_runbook(tcfg["runbook"])
         params = self._build_params(text, ldate, tcfg, rb, base=record.get("params"))
@@ -209,8 +228,18 @@ class Engine:
         primary_ok = any(ev["r"]["status"] == "ok" for ev in watch)
         evidence_complete = bool(check_evs) and all(
             ev["r"]["status"] == "ok" for ev in check_evs)
-        res["primary_evidence_ok"] = primary_ok
-        res["evidence_complete"] = evidence_complete
+        # self_evidence 只适用于 iQuant 采集记录：手工输入、Dimple/GaussDB 文本即使
+        # 恰好含有 iQuant 关键词，也不能在没有任何事件字段/取证的情况下直接判主证据成功。
+        from_iquant = str(record.get("source") or "").startswith("iquant")
+        if tcfg.get("self_evidence") and from_iquant:
+            # iQuant 告警：证据（命中值/阈值/管控动作）由事件自带，无需业务库 SQL 取证。
+            # 精确关键词命中 + 自带证据即视为主证据成功，置信度由统一规则给 1.0，不在此写死。
+            res["self_evidence"] = True
+            res["primary_evidence_ok"] = True
+            res["evidence_complete"] = True
+        else:
+            res["primary_evidence_ok"] = primary_ok
+            res["evidence_complete"] = evidence_complete
 
         primary = [f for f in failures if f["primary"]]
         if primary:
