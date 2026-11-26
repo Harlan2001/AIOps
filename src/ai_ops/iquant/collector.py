@@ -18,10 +18,10 @@ import logging
 from collections import namedtuple
 from datetime import datetime
 
-from .client import IquantClient, IquantError
 from ..config import load_config
 from ..paths import state_file
 from ..service import DiagnosticService
+from .client import IquantClient, IquantError
 
 logger = logging.getLogger(__name__)
 

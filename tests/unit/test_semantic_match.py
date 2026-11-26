@@ -2,8 +2,8 @@
 """本地语义召回测试（不连库）：同义词 / 模糊匹配 / 负例保护 / 精确优先。"""
 import pytest
 
-from ai_ops.engine.rule_engine import Engine
 from ai_ops.engine import semantic as S
+from ai_ops.engine.rule_engine import Engine
 
 
 @pytest.fixture(scope="module")

@@ -208,9 +208,8 @@ def test_diagnose_error_counted_and_cursor_marked(monkeypatch, tmp_path):
 
 
 def test_scheduler_registers_iquant_job(monkeypatch):
-    from ai_ops.scheduler import runner
-    from ai_ops.scheduler import inspector
     from ai_ops.dimple import collector as dimple_collector
+    from ai_ops.scheduler import inspector, runner
 
     monkeypatch.setattr(inspector, "load_schedule",
                         lambda: {"enabled": False})

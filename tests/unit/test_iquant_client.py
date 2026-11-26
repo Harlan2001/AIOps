@@ -4,8 +4,7 @@ import json
 
 import pytest
 
-from ai_ops.iquant.client import (
-    IquantClient, IquantError, LOGIN_SUCCESS, BIZ_SUCCESS_CODES)
+from ai_ops.iquant.client import BIZ_SUCCESS_CODES, LOGIN_SUCCESS, IquantClient, IquantError
 
 
 def _make():
