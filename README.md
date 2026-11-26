@@ -76,7 +76,6 @@ AIOps/
 ```powershell
 uv sync                      # 安装内核依赖（uv 0.12+，Python 3.12）
 uv sync --extra api          # API 服务（fastapi/uvicorn/pydantic）
-uv sync --extra demo         # Streamlit 演示前脸（汇报/演示用，可选）
 ```
 
 - 内核依赖仅 `py-opengauss`（GaussDB 驱动）+ `pyyaml`；无任何 ML 依赖、无模型文件。
@@ -93,6 +92,17 @@ uv sync --extra demo         # Streamlit 演示前脸（汇报/演示用，可�
 
 ## 五、快速开始
 
+Windows PowerShell 一键启动 FastAPI 后端和 Vue 前端（首次启动自动安装前端依赖）：
+
+```powershell
+.\start.ps1                 # 同时启动前后端
+.\start.ps1 -BackendOnly    # 仅启动后端
+.\start.ps1 -FrontendOnly   # 仅启动前端
+```
+
+服务在独立窗口运行，前端地址为 http://127.0.0.1:5173 ，API 文档为 http://127.0.0.1:8000/docs 。
+也可使用以下命令分别执行诊断、自检与测试：
+
 ```powershell
 $env:PYTHONIOENCODING="utf-8"
 
@@ -102,7 +112,11 @@ uv run ai-ops --source ftr_err --date 20261030             # 按来源/日期取
 uv run ai-ops --text "..." --force-llm                    # 强制 LLM 兜底
 uv run ai-ops --rule --text "[合约=>Au9999]结算价不存在"     # 纯规则模式
 uv run ai-ops --source ftr_err --date 20261030 --limit 500 # 批量回放（尾部输出降本率观测行）
-uv run pytest                                              # 77 项单元 + 集成测试（离线可跑）
+uv run ruff check .                                        # Python 静态检查
+uv run pytest --cov=src/ai_ops --cov-report=term-missing   # 127 项测试 + 覆盖率门禁（离线可跑）
+npm --prefix frontend run lint                             # 前端 ESLint
+npm --prefix frontend run test:coverage                    # 前端 Vitest + 覆盖率门禁
+npm --prefix frontend run build                            # TypeScript 检查 + 生产构建
 
 # API 服务（uvicorn 单进程起步）
 uvicorn ai_ops.api:app --host 0.0.0.0 --port 8000
@@ -119,7 +133,7 @@ uv run python scripts/coverage_scan.py
 - 核心错误表：**ftr_err 99.6%**、**quote_err 99.5%**；报警类表 alarm/quote_alarm/rule_alarm **≈100%**；
 - 规则命中的报错走快速路径**零 token**；HTTP 默认纯规则，仅显式 `escalate=true` 且部署允许时才可能产生 LLM 调用；
 - 覆盖率口径：按 TOP5000 高频骨架 + 长尾表全量 SQL LIKE 复核（此前 TOP200 抽样会低估 alarm 表）。
-- 离线回归基线：77/77 测试全绿（含 runbook 与 977 表结构一致性 fail-fast 防线）。
+- 离线回归基线：127/127 测试全绿（含 runbook 与 977 表结构一致性 fail-fast 防线）。
 
 ## 七、安全与私有化
 
@@ -130,11 +144,11 @@ uv run python scripts/coverage_scan.py
 - **可降级**：LLM、知识库任一缺失都不阻断主流程（200 优雅降级），降级原因在 `source`/报告/页面显式可见。
 - **可审计**：报告逐步标注由 规则/知识库/LLM 完成，LLM 结论附证据；未允许升级时 `escalate=true` 返回 409。
 
-## 八、产品形态（规划）
+## 八、产品形态
 
-私有化内网 **Web 诊断工作台**（Streamlit 演示壳）+ 诊断 API（FastAPI）；业务存储 MySQL 8。
-当前已落地：CLI 诊断内核 + FastAPI 服务（5 端点 + 契约测试）+ 容器化交付材料；
-前端重做/监控平台与 IM 集成按工程推进方案顺序执行。
+私有化内网 **Vue 3 Web 诊断工作台** + 诊断 API（FastAPI）。
+当前已落地：CLI 诊断内核 + FastAPI 服务 + Vue 3 工作台 + 容器化交付材料；
+监控平台与 IM 集成按工程推进方案顺序执行。
 
 ## 九、文档（`docs/`）
 

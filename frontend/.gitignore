@@ -1,4 +1,36 @@
+# ===== 依赖 =====
+# package-lock.json 是可复现安装与 CI 的锁文件，必须提交
 node_modules/
+
+# ===== 构建产物与 TypeScript 增量信息 =====
 dist/
+dist-ssr/
+*.tsbuildinfo
+
+# ===== Vite / Vitest / 代码质量工具缓存 =====
+.vite/
+.vitest/
+.cache/
+.eslintcache
+
+# ===== 测试与覆盖率 =====
+coverage/
+
+# ===== 本地运行日志 =====
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== 本地环境变量 =====
+# Vite 会以 import.meta.env 暴露 VITE_* 变量，真实密钥只能放后端
+# .env.example、.env.<模式>.example 作为模板提交
+.env
+.env.*
+!.env.example
+!.env.*.example
 *.local
-.DS_Store
+
+# 编辑器与操作系统通用规则由仓库根目录 .gitignore 统一管理

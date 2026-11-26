@@ -9,9 +9,9 @@
 - 外挂目录不存在时行为与纯包内基线完全一致。
 """
 import os
+from importlib.resources import files
 
 import yaml
-from importlib.resources import files
 
 _PKG_FILES = files("ai_ops.assets.rules")
 

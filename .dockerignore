@@ -1,22 +1,84 @@
-# 口径与 .gitignore 对齐：密钥、运行时大资产、本地环境绝不进镜像构建上下文
-.git
+# 目标：缩小构建上下文、避免密钥与本地缓存进入构建器，并减少缓存失效
+# 必须保留：pyproject.toml、uv.lock、README.md、src/、config/*.example
+
+# ===== Git 元数据与仓库协作文件 =====
+.git/
+.github/
 .gitignore
+.gitattributes
 .dockerignore
+docker-compose*.yml
+docker-compose*.yaml
+compose.yml
+compose.yaml
 
-# 真实配置（含密钥/口令；镜像内由挂载或环境变量注入）
-config/db.yaml
-config/llm.yaml
-config/kb.yaml
+# ===== 密钥与真实配置 =====
+# 所有 .env（包括模板）均无需进入后端镜像构建上下文
+**/.env
+**/.env.*
 
-# 运行时数据与产物（镜像按需 COPY 内部制品，不进构建上下文）
+# 真实配置在运行时通过环境变量或卷挂载注入；仅保留 COPY 所需的模板
+config/*.yaml
+config/*.yml
+!config/*.example
+.streamlit/
+
+# ===== 运行时数据与本地产物 =====
 var/
 reports/
-dist/
+logs/
+**/*.log
+**/*.log.*
+internship-logs/
+demo_*.txt
+
+# ===== Python：虚拟环境与解释器缓存 =====
 .venv/
 venv/
 **/__pycache__/
-*.pyc
+**/*.py[cod]
+**/*$py.class
 
-# 本地工作目录
-internship-logs/
+# ===== Python：构建、分发与离线安装产物 =====
+build/
+dist/
+**/*.egg-info/
+.eggs/
+wheelhouse/
+
+# ===== 测试、覆盖率与质量工具缓存 =====
+**/.pytest_cache/
+**/.coverage*
+**/htmlcov/
+**/coverage.xml
+**/.tox/
+**/.nox/
+**/.hypothesis/
+**/.mypy_cache/
+**/.pyright/
+**/.ruff_cache/
+**/.cache/
+.uv-cache/
+
+# ===== 当前后端 Dockerfile 不使用的内容 =====
+# 若未来改为多阶段前端构建，需要重新开放 frontend/ 及其依赖锁文件
+frontend/
+tests/
+scripts/
+demo/
 docs/
+start.ps1
+
+# ===== 编辑器与 IDE =====
+.idea/
+.vs/
+.vscode/
+**/*.sw?
+**/*~
+
+# ===== 操作系统 =====
+**/.DS_Store
+**/Thumbs.db
+**/ehthumbs.db
+**/Desktop.ini
+**/$RECYCLE.BIN/

@@ -13,8 +13,8 @@ import argparse
 import sys
 
 from ai_ops import pipeline, reporting, telemetry
-from ai_ops.engine.rule_engine import Engine
 from ai_ops.engine import error_records as ER
+from ai_ops.engine.rule_engine import Engine
 
 # 命令行参数名 -> 主键列名
 _KEY_ARGS = [

@@ -15,8 +15,8 @@ diagnose(record) -> dict 是未来 FastAPI / 调度器 / worker 唯一可依赖�
 from ai_ops import evidence
 from ai_ops.engine import parser as P
 from ai_ops.engine.rule_engine import Engine
-from ai_ops.llm.client import LLMClient
 from ai_ops.kb.client import KnowledgeClient
+from ai_ops.llm.client import LLMClient
 
 
 def _loc_str(loc):

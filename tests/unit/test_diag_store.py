@@ -5,7 +5,6 @@ import pytest
 from ai_ops.store import connection, diag_repo, persist
 from ai_ops.store.connection import StoreWriteError
 
-
 # ---------- 指纹 ----------
 
 
