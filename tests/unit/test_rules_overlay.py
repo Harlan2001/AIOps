@@ -63,6 +63,21 @@ def test_overlay_noise_dedup_append(tmp_path, monkeypatch):
     assert len(noise) == len(base_noise) + 1  # 基线词去重不重复追加
 
 
+def test_overlay_synonyms_same_id_replace_new_appends(tmp_path, monkeypatch):
+    base = rules_store.load_synonyms()
+    type_id = next(iter(base))
+    (tmp_path / "synonyms.yaml").write_text(
+        "synonyms:\n"
+        "  %s: [\"外挂替换说法\"]\n"
+        "  brand_new_type: [\"外挂新增说法\"]\n" % type_id,
+        encoding="utf-8")
+    monkeypatch.setenv("AIOPS_RULES_DIR", str(tmp_path))
+
+    merged = rules_store.load_synonyms()
+    assert merged[type_id] == ["外挂替换说法"]
+    assert merged["brand_new_type"] == ["外挂新增说法"]
+
+
 def test_overlay_runbook_file_overrides_package(tmp_path, monkeypatch):
     rb_dir = tmp_path / "runbooks"
     rb_dir.mkdir()

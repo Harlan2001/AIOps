@@ -11,9 +11,8 @@
 - 同义词为数据文件（synonyms.yaml），回流补充无需改代码。
 """
 import re
-from importlib.resources import files
 
-import yaml
+from ai_ops import rules_store
 
 # 去掉参数块 [..] 与占位符 <..>
 _BLOCK_RE = re.compile(r"[\[\<][^\[\]\<\>]*[\]\>]")
@@ -33,11 +32,8 @@ MAX_SCAN_LEN = 80   # 输入归一化后超过该长度截断，控制窗口扫�
 
 
 def _load_synonyms():
-    """返回 {规则 id: [口语短语...]}，仅包内基线。"""
-    with files("ai_ops.assets.rules").joinpath("synonyms.yaml").open(
-            "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-    return {k: list(v) for k, v in (data.get("synonyms") or {}).items()}
+    """返回 {规则 id: [口语短语...]}，包内基线 + AIOPS_RULES_DIR 外挂覆盖。"""
+    return rules_store.load_synonyms()
 
 
 def normalize(text):

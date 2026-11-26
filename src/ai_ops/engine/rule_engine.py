@@ -49,6 +49,9 @@ class Engine:
             return "ora"
         if not P.is_chinese(text):
             return "other"
+        # 例行成功/恢复通知先于全局“告警”错误词，保持既有噪音语义。
+        if P.is_routine_alarm(text, self.noise_kw):
+            return "noise"
         if any(k in text for k in P.ERROR_KW):
             return "biz"
         if errcode and errcode != 0:
@@ -225,7 +228,10 @@ class Engine:
         primary_ok = any(ev["r"]["status"] == "ok" for ev in watch)
         evidence_complete = bool(check_evs) and all(
             ev["r"]["status"] == "ok" for ev in check_evs)
-        if tcfg.get("self_evidence"):
+        # self_evidence 只适用于 iQuant 采集记录：手工输入、Dimple/GaussDB 文本即使
+        # 恰好含有 iQuant 关键词，也不能在没有任何事件字段/取证的情况下直接判主证据成功。
+        from_iquant = str(record.get("source") or "").startswith("iquant")
+        if tcfg.get("self_evidence") and from_iquant:
             # iQuant 告警：证据（命中值/阈值/管控动作）由事件自带，无需业务库 SQL 取证。
             # 精确关键词命中 + 自带证据即视为主证据成功，置信度由统一规则给 1.0，不在此写死。
             res["self_evidence"] = True

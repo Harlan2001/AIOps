@@ -85,6 +85,15 @@ def test_position_swing_no_longer_fuzzy_routed_to_net_position_alert(eng):
     assert res["type"]["id"] != "net_position_alert"
 
 
+def test_self_evidence_bypass_requires_iquant_source(eng):
+    # 手工文本即使命中 iQuant 关键词，也没有事件自带证据，不能直接给满分。
+    res = eng.diagnose({"text": "交易头寸大幅波动", "errcode": 0, "params": {}})
+    assert res["type"]["id"] == "iquant_position_swing"
+    assert "self_evidence" not in res
+    assert res["primary_evidence_ok"] is False
+    assert pipeline.rule_confidence(res) == 0.4
+
+
 # ---------- 统一置信度函数的真实档位（Dimple / iQuant 通用）----------
 
 def test_rule_confidence_real_tiers():
@@ -101,6 +110,13 @@ def test_rule_confidence_real_tiers():
     # 精确关键词命中但主证据无成功取证
     assert pipeline.rule_confidence({
         "type": {"id": "x"}, "match_kind": "keyword",
+        "primary_evidence_ok": False}) == 0.4
+    # 语义召回同样不能绕过证据降级门
+    assert pipeline.rule_confidence({
+        "type": {"id": "x"}, "match_kind": "synonym",
+        "primary_evidence_ok": False}) == 0.4
+    assert pipeline.rule_confidence({
+        "type": {"id": "x"}, "match_kind": "fuzzy",
         "primary_evidence_ok": False}) == 0.4
     # 精确关键词命中且主证据成功
     assert pipeline.rule_confidence({

@@ -45,6 +45,22 @@ def is_tech_error(text):
 is_ora = is_tech_error
 
 
+def is_routine_alarm(text, noise_kw=None):
+    """识别“告警处理成功/已经恢复”等例行通知，保持全局“告警”加入前的噪音语义。
+
+    仅在除“告警”外没有其他错误词、且命中既有噪音词时成立。iQuant 的
+    “事件状态 已处理/已忽略”是闭环告警本身，不属于例行通知，必须继续诊断。
+    """
+    t = text or ""
+    if "告警" not in t:
+        return False
+    if any(k in t for k in ERROR_KW if k != "告警"):
+        return False
+    if "事件状态" in t and any(k in t for k in ("已处理", "已忽略")):
+        return False
+    return any(k in t for k in (noise_kw or NOISE_KW))
+
+
 def normalize_skeleton(text):
     """把 [字段=>值] 参数值占位为 ?，数字→#，得到聚类骨架。"""
     if not text:
@@ -102,6 +118,8 @@ def classify(text, errcode=0):
         return "ora"
     if not is_chinese(t):
         return "other"
+    if is_routine_alarm(t):
+        return "noise"
     if any(k in t for k in ERROR_KW):
         return "biz"
     if errcode and errcode != 0:

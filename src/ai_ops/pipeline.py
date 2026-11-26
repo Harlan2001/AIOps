@@ -36,17 +36,19 @@ SEMANTIC_CONFIDENCE = {"synonym": 0.8, "fuzzy": 0.6}
 def rule_confidence(rule_res):
     """统一置信度（Dimple / iQuant 通用，零模型）：
     - 精确关键词命中且主证据成功（Dimple 查库取证 / iQuant 事件自带证据）= 1.0；
-    - 同义词召回 = 0.8；字符模糊召回 = 0.6；
-    - 未识别类型、或精确命中但主证据无成功取证 = 0.4。
+    - 同义词召回且主证据成功 = 0.8；字符模糊召回且主证据成功 = 0.6；
+    - 未识别类型、或任何命中方式下主证据无成功取证 = 0.4。
+
+    语义召回同样受证据门约束：命中方式不能绕过 B8 的缺证降级。
     """
     if not rule_res.get("type"):
+        return LOW_CONFIDENCE
+    if not rule_res.get("primary_evidence_ok"):
         return LOW_CONFIDENCE
     match_kind = rule_res.get("match_kind")
     if match_kind in SEMANTIC_CONFIDENCE:
         return SEMANTIC_CONFIDENCE[match_kind]
-    if rule_res.get("primary_evidence_ok"):
-        return 1.0
-    return LOW_CONFIDENCE
+    return 1.0
 
 
 def _evidence_note(rule_res):
@@ -77,7 +79,7 @@ def _rule_answer(rule_res, confidence):
     # 语义召回标注：非精确关键词命中，显式告知来源与复核建议
     kind = rule_res.get("match_kind")
     if kind == "synonym":
-        sem_note = "口语同义词召回（非标准关键词命中），已按对应规则查库取证"
+        sem_note = "口语同义词召回（非标准关键词命中），请结合取证结果复核"
         ans["match_kind"] = kind
         note = (note + "；" + sem_note) if note else sem_note
     elif kind == "fuzzy":

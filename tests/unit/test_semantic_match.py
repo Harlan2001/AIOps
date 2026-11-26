@@ -35,6 +35,18 @@ def test_synonym_recall(eng, text, expect):
     assert meta["match_kind"] == "synonym"
 
 
+# 含通用词“自成交”的具体预警短语：精确最长词应路由到预警类型，而非通用自成交。
+@pytest.mark.parametrize("text", [
+    "自成交太多",
+    "自成交次数到上限",
+    "自成交达到阀值",
+])
+def test_specific_self_trade_alert_beats_generic_keyword(eng, text):
+    t, _score, meta = eng.match_with_meta(text, 0)
+    assert t is not None and t["id"] == "self_trade_alert"
+    assert meta["match_kind"] == "keyword"
+
+
 # 错别字 / 繁简：模糊匹配召回
 @pytest.mark.parametrize("text,expect", [
     ("持仓不组，平不了仓", "position_not_enough"),
@@ -69,4 +81,14 @@ def test_injected_synonyms():
     types = [{"id": "x", "title": "X", "keywords": ["标准词"]}]
     m = S.SemanticMatcher(types, synonyms={"x": ["大白话"]})
     t, kind, score = m.match("这条全是大白话")
+    assert t["id"] == "x" and kind == "synonym"
+
+
+def test_synonyms_load_rules_overlay(tmp_path, monkeypatch):
+    (tmp_path / "synonyms.yaml").write_text(
+        "synonyms:\n  x: [\"外挂大白话\"]\n", encoding="utf-8")
+    monkeypatch.setenv("AIOPS_RULES_DIR", str(tmp_path))
+    types = [{"id": "x", "title": "X", "keywords": ["标准词"]}]
+    m = S.SemanticMatcher(types)
+    t, kind, _score = m.match("这条全是外挂大白话")
     assert t["id"] == "x" and kind == "synonym"

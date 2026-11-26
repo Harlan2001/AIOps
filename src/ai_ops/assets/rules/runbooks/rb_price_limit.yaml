@@ -21,12 +21,15 @@ steps:
 
   - id: price_limits
     type: sql_check
-    title: 当日结算价/昨结价检查
+    title: 当日结算价/昨结价检查（组合合约要求每腿齐全）
     primary: true
     expect: {exists: true}
-    sql: "SELECT trade_date, contract_id, last_clear_price, clear_price FROM dimple.tc_clear_price WHERE trade_date = :trade_date AND contract_id = ANY(string_to_array(:contract, '-'))"
+    # 组合合约（如 au2612-au2702）必须每条腿都有当日结算价才算主证据成功：
+    # 仅当“匹配到的不同合约数 = 请求腿数”时才返回一行；任一脚缺失即无行并进入 on_fail，
+    # 避免 ANY(...) 只匹配到部分腿时被误判为结算价已齐全。
+    sql: "SELECT trade_date, contract_id, last_clear_price, clear_price FROM dimple.tc_clear_price WHERE trade_date = :trade_date AND contract_id = ANY(string_to_array(:contract, '-')) AND (SELECT COUNT(DISTINCT contract_id) FROM dimple.tc_clear_price WHERE trade_date = :trade_date AND contract_id = ANY(string_to_array(:contract, '-'))) = array_length(string_to_array(:contract, '-'), 1)"
     on_fail:
-      root: "{contract} 在 {trade_date} 的结算价尚未生成（闭市后处理未执行/失败，或当日行情缺失）"
+      root: "{contract} 在 {trade_date} 的结算价尚未生成或不完整（组合合约存在缺腿；闭市后处理未执行/失败，或当日行情缺失）"
       action:
         - "在【结算价管理】中确认该合约当日结算价是否已生成"
         - "检查闭市后结算/行情导入任务是否成功执行"
