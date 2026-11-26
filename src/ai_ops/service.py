@@ -175,15 +175,18 @@ class DiagnosticService:
         return self.diagnose_rule_only(rec)
 
     def _persist(self, rec, out, ctx):
-        """统一 best-effort 落库；落库失败由 persist 内部吞掉，不影响诊断。"""
+        """统一 best-effort 落库；失败不抛异常，但在结果内标记供采集层重试。"""
         ctx = ctx or {}
         trigger_type = ctx.get("trigger_type") or "manual"
         batch_id = ctx.get("batch_id")
         is_error = isinstance(out, dict) and bool(out.get("_diagnose_error"))
-        persist.persist_diagnosis(
+        persisted = persist.persist_diagnosis(
             rec, out, trigger_type, batch_id=batch_id,
             diag_status="error" if is_error else "success",
             error_msg=out.get("_diagnose_error") if is_error else None)
+        if persisted is False and isinstance(out, dict):
+            # 数据库临时故障时不能让实时采集把该事件永久标记为已处理。
+            out["_persist_error"] = "诊断结果落库失败"
 
     def diagnose_many(self, recs):
         """批量诊断（纯规则），返回 [(record, contract_result), ...]。"""

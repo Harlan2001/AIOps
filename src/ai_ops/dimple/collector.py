@@ -621,9 +621,12 @@ def run_realtime_collection(svc=None):
                 recs, _ctx={"trigger_type": "scheduled",
                             "batch_id": batch_id})
             for (record, result), (_rec, fp, lk) in zip(pairs, pending):
-                if isinstance(result, dict) and result.get("_diagnose_error"):
+                diagnose_error = isinstance(result, dict) and result.get("_diagnose_error")
+                persist_error = isinstance(result, dict) and result.get("_persist_error")
+                if diagnose_error or persist_error:
+                    # 与 iQuant 一致：临时诊断/落库故障不推进游标，恢复后重试。
                     diag_errors += 1
-                # 诊断完成后再标记游标，异常条目也标记，避免下轮反复重试同一条。
+                    continue
                 cursor.mark(ep_id, fp, lk)
 
         summary["endpoints"][ep_id] = {

@@ -2,6 +2,8 @@
 """iQuant 采集器单元测试（离线打桩，不连真实环境与 GaussDB）。"""
 import json
 
+import pytest
+
 from ai_ops.iquant import collector as C
 from ai_ops.iquant.client import IquantError
 
@@ -108,6 +110,17 @@ class ErrorService:
         pass
 
 
+class PersistErrorService:
+    """诊断成功但数据库临时故障：服务层用内部标记告知采集层。"""
+
+    def diagnose_many_isolated(self, recs, escalate_flags=None, _ctx=None):
+        return [(r, {"rule_res": {}, "answer": {},
+                     "_persist_error": "db down"}) for r in recs]
+
+    def close(self):
+        pass
+
+
 def _enabled_cfg(**over):
     cfg = dict(C._DEFAULTS)
     cfg.update({"enabled": True, "page_size": 2, "max_pages": 50})
@@ -196,15 +209,203 @@ def test_fetch_error_isolated(monkeypatch, tmp_path):
     assert s["diagnosed"] == 0
 
 
-def test_diagnose_error_counted_and_cursor_marked(monkeypatch, tmp_path):
+def test_diagnose_error_not_marked_and_retried(monkeypatch, tmp_path):
     monkeypatch.setattr(C, "load_iquant_config", lambda: _enabled_cfg())
     pages = [{"retCode": 200000, "total": 1,
               "data": [_raw_event(1, "NEW")]}]
-    cursor = C.CursorStore(path=tmp_path / "c.json")
+    cur_path = tmp_path / "c.json"
+
+    s1 = C.run_realtime_collection(
+        svc=ErrorService(), client=FakeClient(pages),
+        cursor=C.CursorStore(path=cur_path))
+    assert s1["errors"] == 1
+    assert s1["diagnosed"] == 0
+
+    # 故障恢复后同一事件必须重试，而不是因上轮失败被永久跳过。
+    s2 = C.run_realtime_collection(
+        svc=FakeService(), client=FakeClient(pages),
+        cursor=C.CursorStore(path=cur_path))
+    assert s2["diagnosed"] == 1
+    assert s2["skipped_seen"] == 0
+
+    s3 = C.run_realtime_collection(
+        svc=FakeService(), client=FakeClient(pages),
+        cursor=C.CursorStore(path=cur_path))
+    assert s3["diagnosed"] == 0
+    assert s3["skipped_seen"] == 1
+
+
+def test_persist_error_not_marked_and_retried(monkeypatch, tmp_path):
+    monkeypatch.setattr(C, "load_iquant_config", lambda: _enabled_cfg())
+    pages = [{"retCode": 200000, "total": 1,
+              "data": [_raw_event(1, "NEW")]}]
+    cur_path = tmp_path / "c.json"
+
+    s1 = C.run_realtime_collection(
+        svc=PersistErrorService(), client=FakeClient(pages),
+        cursor=C.CursorStore(path=cur_path))
+    assert s1["errors"] == 1
+    assert s1["diagnosed"] == 0
+
+    s2 = C.run_realtime_collection(
+        svc=FakeService(), client=FakeClient(pages),
+        cursor=C.CursorStore(path=cur_path))
+    assert s2["diagnosed"] == 1
+    assert s2["skipped_seen"] == 0
+
+
+def test_skipped_closed_can_be_reprocessed_after_config_change(monkeypatch, tmp_path):
+    cfg = _enabled_cfg(handle_closed=False)
+    monkeypatch.setattr(C, "load_iquant_config", lambda: dict(cfg))
+    pages = [{"retCode": 200000, "total": 1,
+              "data": [_raw_event(2, "HANDLED")]}]
+    cur_path = tmp_path / "c.json"
+
+    s1 = C.run_realtime_collection(
+        svc=FakeService(), client=FakeClient(pages),
+        cursor=C.CursorStore(path=cur_path))
+    assert s1["skipped_closed"] == 1
+    assert s1["diagnosed"] == 0
+
+    cfg["handle_closed"] = True
+    s2 = C.run_realtime_collection(
+        svc=FakeService(), client=FakeClient(pages),
+        cursor=C.CursorStore(path=cur_path))
+    assert s2["skipped_seen"] == 0
+    assert s2["diagnosed"] == 1
+
+
+def test_missing_event_id_is_invalid_not_seen(monkeypatch, tmp_path):
+    monkeypatch.setattr(C, "load_iquant_config", lambda: _enabled_cfg())
+    pages = [{"retCode": 200000, "total": 1,
+              "data": [_raw_event(None, "NEW")]}]
     s = C.run_realtime_collection(
-        svc=ErrorService(), client=FakeClient(pages), cursor=cursor)
-    assert s["errors"] == 1
+        svc=FakeService(), client=FakeClient(pages),
+        cursor=C.CursorStore(path=tmp_path / "c.json"))
+    assert s["fetched"] == 1
+    assert s["invalid"] == 1
+    assert s["skipped_seen"] == 0
     assert s["diagnosed"] == 0
+    assert s["errors"] == 0
+
+
+def test_max_pages_truncation_is_reported(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        C, "load_iquant_config",
+        lambda: _enabled_cfg(page_size=1, max_pages=1))
+    pages = [
+        {"retCode": 200000, "total": 2, "data": [_raw_event(1, "NEW")]},
+        {"retCode": 200000, "total": 2, "data": [_raw_event(2, "NEW")]},
+    ]
+    client = FakeClient(pages)
+    s = C.run_realtime_collection(
+        svc=FakeService(), client=client,
+        cursor=C.CursorStore(path=tmp_path / "c.json"))
+    assert s["fetched"] == 1
+    assert s["diagnosed"] == 1
+    assert s["truncated"] is True
+    assert s["by_endpoint"][EP.id]["total"] == 2
+    assert s["by_endpoint"][EP.id]["truncated"] is True
+    assert s["by_endpoint"][EP.id]["page_next"] == 2
+    assert len(client.calls) == 1
+
+    # 下一轮从持久化的第 2 页继续，尾部事件不会永远采不到。
+    s2 = C.run_realtime_collection(
+        svc=FakeService(), client=FakeClient(pages),
+        cursor=C.CursorStore(path=tmp_path / "c.json"))
+    assert s2["diagnosed"] == 1
+    assert s2["truncated"] is False
+    assert s2["by_endpoint"][EP.id]["page_start"] == 2
+    assert s2["by_endpoint"][EP.id]["page_next"] == 1
+
+
+def test_cursor_is_reloaded_after_lock(monkeypatch, tmp_path):
+    monkeypatch.setattr(C, "load_iquant_config", lambda: _enabled_cfg())
+    path = tmp_path / "c.json"
+    # 模拟 worker B 在等待锁之前加载的空游标；worker A 随后写入成功指纹。
+    stale = C.CursorStore(path=path)
+    pages = [{"retCode": 200000, "total": 1,
+              "data": [_raw_event(1, "NEW")]}]
+    s1 = C.run_realtime_collection(
+        svc=FakeService(), client=FakeClient(pages),
+        cursor=C.CursorStore(path=path))
+    assert s1["diagnosed"] == 1
+
+    s2 = C.run_realtime_collection(
+        svc=FakeService(), client=FakeClient(pages), cursor=stale)
+    assert s2["diagnosed"] == 0
+    assert s2["skipped_seen"] == 1
+
+
+def test_malformed_row_is_isolated(monkeypatch, tmp_path):
+    monkeypatch.setattr(C, "load_iquant_config", lambda: _enabled_cfg())
+    pages = [{"retCode": 200000, "total": 2,
+              "data": [None, _raw_event(1, "NEW")]}]
+    s = C.run_realtime_collection(
+        svc=FakeService(), client=FakeClient(pages),
+        cursor=C.CursorStore(path=tmp_path / "c.json"))
+    assert s["invalid"] == 1
+    assert s["diagnosed"] == 1
+    assert s["errors"] == 0
+
+
+@pytest.mark.parametrize("payload", ["[]", "1", '"bad"', '{"seen": []}'])
+def test_invalid_cursor_shape_raises(payload, tmp_path):
+    path = tmp_path / "c.json"
+    path.write_text(payload, encoding="utf-8")
+    with pytest.raises(C.CursorStoreError):
+        C.CursorStore(path=path)
+
+
+def test_invalid_cursor_aborts_without_replaying(monkeypatch, tmp_path):
+    monkeypatch.setattr(C, "load_iquant_config", lambda: _enabled_cfg())
+    path = tmp_path / "c.json"
+    path.write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(C, "state_file", lambda _name: path)
+    client = FakeClient([
+        {"retCode": 200000, "total": 1, "data": [_raw_event(1, "NEW")]}])
+    s = C.run_realtime_collection(svc=FakeService(), client=client)
+    assert s["status"] == "error"
+    assert s["error"] == "cursor_load_failed"
+    assert client.calls == []
+
+
+def test_success_fingerprint_does_not_expire_by_default(tmp_path):
+    path = tmp_path / "c.json"
+    cursor = C.CursorStore(path=path)
+    fp = C._event_fingerprint(EP, 1)
+    cursor._seen[fp] = 1.0  # 远早于任何默认 TTL 的历史成功记录
+    cursor.save()
+    assert C.CursorStore(path=path).seen(fp) is True
+    # 只有显式配置 TTL 才清理；调用方需自行接受历史事件重放风险。
+    assert C.CursorStore(path=path, ttl_days=1).seen(fp) is False
+
+
+def test_interprocess_lock_excludes_second_acquirer(tmp_path):
+    path = tmp_path / "c.json.lock"
+    first, second = C._InterProcessLock(path), C._InterProcessLock(path)
+    assert first.acquire() is True
+    assert second.acquire() is False
+    first.release()
+    assert second.acquire() is True
+    second.release()
+
+
+def test_locked_run_skips_upstream_and_diagnosis(monkeypatch, tmp_path):
+    monkeypatch.setattr(C, "load_iquant_config", lambda: _enabled_cfg())
+    cursor = C.CursorStore(path=tmp_path / "c.json")
+    lock = C._InterProcessLock(
+        cursor.path.with_name(cursor.path.name + ".lock"))
+    assert lock.acquire() is True
+    try:
+        client = FakeClient([
+            {"retCode": 200000, "total": 1, "data": [_raw_event(1, "NEW")]}])
+        s = C.run_realtime_collection(
+            svc=FakeService(), client=client, cursor=cursor)
+        assert s["status"] == "locked"
+        assert client.calls == []
+    finally:
+        lock.release()
 
 
 def test_scheduler_registers_iquant_job(monkeypatch):

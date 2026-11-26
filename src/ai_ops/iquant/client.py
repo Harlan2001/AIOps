@@ -72,9 +72,14 @@ class IquantClient:
 
     # ---------------- 鉴权 ----------------
 
-    def _save_token(self, result):
+    def _save_token(self, result, *, keep_refresh=False):
         self._token = result["access_token"]
-        self._refresh_token = result.get("refresh_token")
+        if result.get("refresh_token"):
+            self._refresh_token = result["refresh_token"]
+        elif not keep_refresh:
+            self._refresh_token = None
+        # refresh 响应省略 refresh_token 是合法 OAuth 行为，应沿用原 refresh_token；
+        # 完整登录未返回时才清空，避免拿旧会话的 refresh_token 混入新会话。
         expires_in = int(result.get("expires_in", 86399))
         # 提前 60 秒视为过期，避免临界请求拿到刚好失效的 token。
         self._expires_at = time.time() + max(0, expires_in - 60)
@@ -89,9 +94,12 @@ class IquantClient:
         }
         out = self._http("/oauth/token", data=data, headers=headers,
                          method="POST")
+        if not isinstance(out, dict):
+            raise IquantError("oauth/token 响应不是 JSON 对象")
         if out.get("retCode") != LOGIN_SUCCESS:
             raise IquantError("oauth/token 失败：%s" % out.get("retMsg"))
-        self._save_token(out["result"])
+        self._save_token(
+            out["result"], keep_refresh=form.get("grant_type") == "refresh_token")
         return self._token
 
     def login(self):
@@ -144,8 +152,12 @@ class IquantClient:
                 "branch": "czbank",
                 "lang": "zh",
             }
-            return self._http(api_path, data=json.dumps(body).encode("utf-8"),
-                              headers=headers, method="POST")
+            out = self._http(
+                api_path, data=json.dumps(body).encode("utf-8"),
+                headers=headers, method="POST")
+            if not isinstance(out, dict):
+                raise IquantError("业务接口响应不是 JSON 对象")
+            return out
 
         try:
             out = _call()
@@ -153,6 +165,11 @@ class IquantClient:
             if "401" not in str(e):
                 raise
             # 强制重新登录后重试一次。
+            self.login()
+            out = _call()
+
+        # 部分部署用 HTTP 200 包装业务 401，同样需要一次重新登录。
+        if out.get("retCode") in (401, "401"):
             self.login()
             out = _call()
 

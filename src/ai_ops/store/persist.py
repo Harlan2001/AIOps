@@ -25,7 +25,10 @@ def is_enabled():
 
 def persist_diagnosis(rec, out, trigger_type, batch_id=None,
                       diag_status="success", error_msg=None):
-    """落库一条诊断；未启用直接返回 None，异常静默记录。
+    """落库一条诊断；返回 True=成功、False=已启用但失败、None=未启用。
+
+    异常仍静默记录、绝不向上抛出，保证"记账"故障不阻断主诊断；但用 False
+    把失败显式告知编排层，实时采集可据此不推进游标、留待下轮重试。
 
     巡检（scheduled）用 upsert 去重；手工/批量事件用 insert 记为独立事件，
     不因内容指纹相同而互相覆盖。
@@ -37,9 +40,11 @@ def persist_diagnosis(rec, out, trigger_type, batch_id=None,
             rec, out, trigger_type, batch_id=batch_id,
             diag_status=diag_status, error_msg=error_msg)
         if trigger_type == "scheduled":
-            return diag_repo.upsert_log(entry)
-        return diag_repo.save_log(entry)
+            diag_repo.upsert_log(entry)
+        else:
+            diag_repo.save_log(entry)
+        return True
     except Exception as e:  # noqa: BLE001 - 落库失败不得影响诊断主流程
         _logger.warning("诊断结果落库失败（已忽略）：%s: %s",
                         type(e).__name__, e)
-        return None
+        return False

@@ -5,7 +5,8 @@
   - aiops_inspection：GaussDB 错误表巡检（schedule.enabled，cron 或固定间隔）；
   - dimple_realtime  ：Dimple 接口实时采集（dimple.enabled，固定间隔，准实时）；
   - iquant_realtime  ：iQuant 事中风控事件实时采集（iquant.enabled，固定间隔，准实时）。
-三者均 max_instances=1 + coalesce，配合各自的进程锁，杜绝任务重叠与补偿堆积。
+三者均 max_instances=1 + coalesce，杜绝进程内任务重叠与补偿堆积；
+iQuant 采集另持游标跨进程文件锁，多 API worker 不会重复拉取与并发写游标。
 所有任务都未启用时返回 None，服务行为与现状完全一致。
 """
 import logging

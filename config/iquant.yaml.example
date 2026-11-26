@@ -27,12 +27,13 @@ timeout: 10
 interval_minutes: 5
 
 # 分页大小（接口校验 1-100）与每次采集的最大页数（硬上限，防止异常数据量导致无限拉取）。
+# 达到上限仍有后续页时，采集摘要返回 truncated=true 并记录告警，下轮从持久化的下一页继续。
 page_size: 100
 max_pages: 200
 
 # 是否处理已闭环事件：
-#   false（默认）：只诊断未闭环事件（NEW/NOTIFIED），HANDLED/IGNORED 标记后跳过；
-#   true ：HANDLED/IGNORED 也纳入诊断。
+#   false（默认）：只诊断未闭环事件（NEW/NOTIFIED），HANDLED/IGNORED 跳过且不写游标；
+#   true ：HANDLED/IGNORED 也纳入诊断（此前跳过的事件可在后续轮次补采）。
 handle_closed: false
 
 # 未闭环事件状态白名单（handle_closed=false 时生效，可按部署需要调整）。

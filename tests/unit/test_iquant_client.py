@@ -128,6 +128,62 @@ def test_query_page_retries_once_on_401(monkeypatch):
     assert auth_seen[1].endswith("NEW")
 
 
+def test_refresh_response_without_new_refresh_token_preserves_old(monkeypatch):
+    c = _make()
+    c._refresh_token = "RT-OLD"
+    monkeypatch.setattr(
+        c, "_http",
+        lambda *a, **k: {"retCode": LOGIN_SUCCESS,
+                         "result": {"access_token": "AT-NEW", "expires_in": 3600}})
+    assert c._do_refresh() == "AT-NEW"
+    assert c._refresh_token == "RT-OLD"
+
+
+def test_full_login_without_refresh_token_clears_old(monkeypatch):
+    c = _make()
+    c._refresh_token = "RT-OLD"
+    monkeypatch.setattr(
+        c, "_http",
+        lambda *a, **k: {"retCode": LOGIN_SUCCESS,
+                         "result": {"access_token": "AT-NEW", "expires_in": 3600}})
+    assert c.login() == "AT-NEW"
+    assert c._refresh_token is None
+
+
+def test_query_page_retries_once_on_business_401(monkeypatch):
+    c = _make()
+    c._token = "OLD"
+    monkeypatch.setattr(c, "ensure_token", lambda: c._token)
+    auth_seen = []
+
+    def fake_http(path, *, data=None, headers=None, method=None):
+        auth_seen.append(headers["Authorization"])
+        if len(auth_seen) == 1:
+            return {"retCode": "401", "retMsg": "token expired"}
+        return {"retCode": 200000, "data": [], "total": 0}
+
+    monkeypatch.setattr(c, "_http", fake_http)
+
+    def do_login():
+        c._token = "NEW"
+        return "NEW"
+
+    monkeypatch.setattr(c, "login", do_login)
+    out = c.query_page("/x")
+    assert out["retCode"] == 200000
+    assert len(auth_seen) == 2
+    assert auth_seen[0].endswith("OLD")
+    assert auth_seen[1].endswith("NEW")
+
+
+def test_query_page_rejects_non_object_response(monkeypatch):
+    c = _make()
+    monkeypatch.setattr(c, "ensure_token", lambda: "AT")
+    monkeypatch.setattr(c, "_http", lambda *a, **k: [])
+    with pytest.raises(IquantError, match="JSON 对象"):
+        c.query_page("/x")
+
+
 def test_biz_success_codes_cover_known_forms():
     # 兼容数字/字符串形态的成功码
     assert 200000 in BIZ_SUCCESS_CODES

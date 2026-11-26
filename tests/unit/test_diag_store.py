@@ -103,7 +103,7 @@ def test_persist_enabled_calls_upsert(monkeypatch):
     calls = []
     monkeypatch.setattr(diag_repo, "upsert_log",
                         lambda entry, table=None: calls.append(entry))
-    persist.persist_diagnosis({"text": "x"}, _envelope(), "scheduled")
+    assert persist.persist_diagnosis({"text": "x"}, _envelope(), "scheduled") is True
     assert len(calls) == 1
 
 
@@ -126,8 +126,18 @@ def test_persist_swallows_errors(monkeypatch):
         raise RuntimeError("db down")
 
     monkeypatch.setattr(diag_repo, "save_log", _boom)
-    # 手工路径落库失败也不抛异常
-    assert persist.persist_diagnosis({}, _envelope(), "manual") is None
+    # 手工路径落库失败不抛异常，但显式返回 False 供实时采集留待重试
+    assert persist.persist_diagnosis({}, _envelope(), "manual") is False
+
+
+def test_service_marks_persist_error_without_raising(monkeypatch):
+    from ai_ops.service import DiagnosticService
+
+    monkeypatch.setattr(persist, "persist_diagnosis", lambda *a, **k: False)
+    svc = object.__new__(DiagnosticService)  # 无需初始化 Engine/KB/LLM
+    out = _envelope()
+    svc._persist({"text": "x"}, out, {"trigger_type": "scheduled"})
+    assert out["_persist_error"] == "诊断结果落库失败"
 
 
 def test_is_enabled_returns_false_on_config_error(monkeypatch):
