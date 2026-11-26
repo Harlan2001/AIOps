@@ -146,8 +146,10 @@ class DiagnosticService:
         只有 telemetry.path == 'llm'（真正由 LLM 给出结论）才计为升级；
         规则快路径或 LLM 不可用的规则兜底均不计入 LLM 升级数。
         """
+        # 显式升级：传 force_llm=True 以跳过规则快速路径、真正调用 LLM；
+        # LLM 未配置/调用失败时 pipeline 内部仍会优雅回退到规则结论。
         out = pipeline.diagnose(
-            rec, eng=self.eng, kbcli=self.kb, llm=self.llm)
+            rec, force_llm=True, eng=self.eng, kbcli=self.kb, llm=self.llm)
         telemetry = out.get("telemetry") or {}
         out["escalated"] = telemetry.get("path") == "llm"
         return out

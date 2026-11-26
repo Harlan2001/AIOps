@@ -201,20 +201,27 @@ def test_stats_uses_single_snapshot(monkeypatch):
     assert out["annotated"] == 3
 
 
-def test_escalated_core_marks_actual_llm_path(monkeypatch):
+def test_escalated_core_forces_llm_and_marks_actual_path(monkeypatch):
     from ai_ops import pipeline
     from ai_ops.service import DiagnosticService
 
-    def _fake(rec, **kw):
-        return {"telemetry": {"path": kw.pop("path", "rule_fast")}}
+    captured = {}
 
-    monkeypatch.setattr(pipeline, "diagnose",
-                        lambda rec, **kw: {"telemetry": {"path": "rule_fast"}})
+    def _fake(rec, **kw):
+        captured.update(kw)
+        return {"telemetry": {"path": "rule_fast"}}
+
+    monkeypatch.setattr(pipeline, "diagnose", _fake)
     svc = DiagnosticService()
     out = svc._escalated_core({"text": "x"})
+    # 升级入口必须显式传 force_llm=True，否则规则命中会被快速路径拦截、永远不调 LLM
+    assert captured.get("force_llm") is True
     assert out["escalated"] is False
-    monkeypatch.setattr(pipeline, "diagnose",
-                        lambda rec, **kw: {"telemetry": {"path": "llm"}})
+
+    def _fake_llm(rec, **kw):
+        return {"telemetry": {"path": "llm"}}
+
+    monkeypatch.setattr(pipeline, "diagnose", _fake_llm)
     assert svc._escalated_core({"text": "x"})["escalated"] is True
 
 
